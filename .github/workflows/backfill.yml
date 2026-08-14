@@ -1,0 +1,54 @@
+name: Backfill histórico NDVI (manual, uma vez)
+
+# Este workflow NÃO roda sozinho por agenda -- só quando você clicar em
+# "Run workflow" na aba Actions. É separado do monitoramento semanal
+# (monitoramento.yml) de propósito: buscar ~10 anos de histórico é uma
+# operação pesada e única, não algo pra repetir toda semana.
+on:
+  workflow_dispatch:
+    inputs:
+      since:
+        description: "Data inicial (AAAA-MM-DD)"
+        required: false
+        default: "2016-07-19"
+      until:
+        description: "Data final (AAAA-MM-DD) -- deixe em branco para 'hoje'"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Rodar backfill histórico
+        env:
+          SH_CLIENT_ID: ${{ secrets.SH_CLIENT_ID }}
+          SH_CLIENT_SECRET: ${{ secrets.SH_CLIENT_SECRET }}
+        run: |
+          ARGS="--since ${{ github.event.inputs.since }}"
+          if [ -n "${{ github.event.inputs.until }}" ]; then
+            ARGS="$ARGS --until ${{ github.event.inputs.until }}"
+          fi
+          python backfill_historico.py $ARGS
+
+      - name: Publicar histórico no repositório
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/data/historico.csv
+          git diff --cached --quiet || git commit -m "Backfill do histórico NDVI/NDWI/NDMI"
+          git push
