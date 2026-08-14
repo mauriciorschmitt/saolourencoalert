@@ -497,10 +497,12 @@ LATEST_JSON = os.path.join(DATA_DIR, "ultimo.json")
 
 
 def _status_from_z(z):
-    az = abs(z)
-    if az >= ALERT_Z_THRESHOLD:
+    # Only the HIGH-NDVI direction matters for this system: an unusually
+    # LOW NDVI just means the reservoir is clearer than typical for the
+    # month, which is not a macrophyte-bloom signal and should not alert.
+    if z >= ALERT_Z_THRESHOLD:
         return "ALERTA"
-    if az >= 1.5:
+    if z >= 1.5:
         return "ATENÇÃO"
     return "NORMAL"
 
