@@ -22,10 +22,10 @@ same GEOMETRY_PIXEL_COUNT).
 
 USAGE
 -----
-    python backfill_historico.py [--since 2021-07-01] [--until 2026-08-01]
+    python backfill_historico.py [--since 2016-07-19] [--until 2026-08-01]
 
-Defaults to --since 2021-07-01 (the start of the reservoir's monitoring
-record used in the paper) and --until today.
+Defaults to --since 2016-07-19 (the start of the Sentinel-2 mission's data
+record) and --until today.
 """
 
 import argparse
@@ -33,6 +33,7 @@ import csv
 import datetime as dt
 import os
 import sys
+import time
 
 # Reuses everything from the main script -- single source of truth.
 from monitor_ndvi import (
@@ -130,7 +131,7 @@ def daterange_chunks(since, until, chunk_days):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--since", default="2021-07-01")
+    parser.add_argument("--since", default="2016-07-19")
     parser.add_argument("--until", default=dt.date.today().isoformat())
     args = parser.parse_args()
 
@@ -141,11 +142,27 @@ def main():
     token = get_access_token()
 
     all_results = []
+    failed_chunks = []
     for start, end in daterange_chunks(since, until, CHUNK_DAYS):
         print(f"  fetching {start} .. {end}")
-        chunk = fetch_chunk(token, start, end)
+        try:
+            chunk = fetch_chunk(token, start, end)
+        except Exception as exc:  # noqa: BLE001
+            # A single bad chunk (timeout, transient 5xx, etc.) shouldn't
+            # kill a ~10-year backfill; log it and keep going, then report
+            # the failures at the end so they can be re-run individually.
+            print(f"    FAILED: {exc}")
+            failed_chunks.append((start, end))
+            continue
         print(f"    {len(chunk)} valid scene(s)")
         all_results.extend(chunk)
+        time.sleep(1)  # be polite to the API across ~40 sequential requests
+
+    if failed_chunks:
+        print(f"\n{len(failed_chunks)} chunk(s) failed and were skipped:")
+        for s, e in failed_chunks:
+            print(f"  python backfill_historico.py --since {s} --until {e}")
+        print("(re-run those ranges individually if you want complete coverage)\n")
 
     if not all_results:
         print("No valid scenes found in the requested range. Nothing written.")
