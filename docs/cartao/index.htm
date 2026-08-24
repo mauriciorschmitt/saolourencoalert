@@ -1,226 +1,1887 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
+
 <meta charset="UTF-8">
+
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#081016">
-<meta name="description" content="Maurício Rodrigo Schmitt — Professor, pesquisador e paleontólogo. Universidade do Contestado.">
-<title>Maurício Rodrigo Schmitt | Perfil profissional</title>
+
+<meta name="theme-color" content="#07131d">
+
+<meta
+  name="description"
+  content="Maurício Rodrigo Schmitt — Professor, pesquisador e paleontólogo. Universidade do Contestado."
+>
+
+<title>Maurício Rodrigo Schmitt | Perfil Profissional</title>
+
+
 <style>
-:root{
-  --bg:#070c11;
-  --panel:#0e171f;
-  --panel2:#121e27;
-  --text:#edf3f1;
-  --muted:#91a0a9;
-  --line:rgba(255,255,255,.085);
-  --accent:#7fb7a6;
-  --accent-soft:#b8d7ce;
+
+/* =====================================================
+   VARIÁVEIS
+===================================================== */
+
+:root {
+
+  --bg: #061018;
+
+  --panel: #091823;
+
+  --panel-light: #0d202e;
+
+  --panel-hover: #102837;
+
+  --text: #f1f5f3;
+
+  --muted: #9aaab3;
+
+  --accent: #76c7b4;
+
+  --accent-light: #a8dfd0;
+
+  --line: rgba(120, 199, 180, .22);
+
+  --shadow: rgba(0, 0, 0, .45);
+
 }
-*{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{
-  margin:0; min-height:100vh; color:var(--text);
-  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+
+
+/* =====================================================
+   RESET
+===================================================== */
+
+* {
+  box-sizing: border-box;
+}
+
+
+html {
+  scroll-behavior: smooth;
+}
+
+
+body {
+
+  margin: 0;
+
+  color: var(--text);
+
+  font-family:
+
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+
+
   background:
-    radial-gradient(circle at 12% 8%,rgba(127,183,166,.12),transparent 27%),
-    radial-gradient(circle at 88% 92%,rgba(127,183,166,.07),transparent 28%),
+
+    radial-gradient(
+      circle at 15% 0%,
+      rgba(76, 140, 160, .18),
+      transparent 30%
+    ),
+
+    radial-gradient(
+      circle at 90% 90%,
+      rgba(82, 180, 150, .08),
+      transparent 30%
+    ),
+
     var(--bg);
+
 }
-a{color:inherit}
-.page{width:min(920px,92%);margin:auto;padding:38px 0 28px}
-.card{
-  overflow:hidden;border:1px solid var(--line);border-radius:30px;
-  background:linear-gradient(145deg,rgba(14,23,31,.98),rgba(7,12,17,.98));
-  box-shadow:0 30px 90px rgba(0,0,0,.42);
+
+
+a {
+
+  color: inherit;
+
 }
-.hero{position:relative;padding:44px 44px 34px}
-.hero:before{
-  content:"";position:absolute;right:-90px;top:-120px;width:330px;height:330px;
-  border:1px solid rgba(127,183,166,.16);border-radius:50%;
-  box-shadow:0 0 0 45px rgba(127,183,166,.025),0 0 0 90px rgba(127,183,166,.018);
+
+
+/* =====================================================
+   CONTAINER
+===================================================== */
+
+.page {
+
+  width: min(1120px, 94%);
+
+  margin: auto;
+
+  padding:
+
+    24px 0
+    36px;
+
 }
-.eyebrow{
-  position:relative;font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;
-  color:var(--accent-soft);font-weight:800;
+
+
+/* =====================================================
+   CARD PRINCIPAL
+===================================================== */
+
+.card {
+
+  overflow: hidden;
+
+  border:
+
+    1px solid
+    rgba(118, 199, 180, .20);
+
+  border-radius: 30px;
+
+
+  background:
+
+    linear-gradient(
+      145deg,
+      rgba(8, 25, 36, .98),
+      rgba(5, 16, 25, .99)
+    );
+
+
+  box-shadow:
+
+    0 35px 100px
+    var(--shadow);
+
 }
-h1{
-  position:relative;font-size:clamp(2.2rem,6vw,4rem);line-height:.98;
-  letter-spacing:-.055em;margin:14px 0 13px;max-width:700px;
+
+
+/* =====================================================
+   HERO
+===================================================== */
+
+.hero {
+
+  position: relative;
+
+  display: grid;
+
+  grid-template-columns:
+
+    330px
+    1fr;
+
+  gap: 40px;
+
+  align-items: center;
+
+
+  padding:
+
+    42px
+    48px
+    34px;
+
 }
-.subtitle{position:relative;color:#d5dfdc;font-size:1.08rem;line-height:1.6}
-.institution{position:relative;margin-top:22px;color:var(--muted);line-height:1.55;font-size:.93rem}
-.institution strong{color:#dfe9e6}
-.divider{height:1px;background:var(--line);margin:0 44px}
-.section{padding:29px 44px}
-.label{
-  margin:0 0 15px;font-size:.72rem;letter-spacing:.17em;
-  text-transform:uppercase;color:var(--muted);font-weight:800;
+
+
+.hero::after {
+
+  content: "";
+
+  position: absolute;
+
+  width: 420px;
+
+  height: 420px;
+
+  right: -200px;
+
+  top: -180px;
+
+  border-radius: 50%;
+
+  border:
+
+    1px solid
+    rgba(118, 199, 180, .12);
+
+
+  box-shadow:
+
+    0 0 0 55px
+    rgba(118, 199, 180, .018),
+
+    0 0 0 110px
+    rgba(118, 199, 180, .012);
+
 }
-.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.link{
-  display:flex;align-items:center;gap:14px;text-decoration:none;
-  padding:14px;border-radius:15px;border:1px solid var(--line);
-  background:rgba(255,255,255,.022);transition:.18s ease;
+
+
+/* =====================================================
+   FOTO
+===================================================== */
+
+.profile-area {
+
+  position: relative;
+
+  z-index: 2;
+
+  display: flex;
+
+  justify-content: center;
+
+  align-items: end;
+
 }
-.link:hover{
-  transform:translateY(-2px);border-color:rgba(127,183,166,.42);
-  background:rgba(127,183,166,.055);
+
+
+.profile-photo {
+
+  width: 300px;
+
+  height: 350px;
+
+  object-fit: cover;
+
+  object-position: center top;
+
+
+  border-radius:
+
+    30px
+    30px
+    24px
+    24px;
+
+
+  border:
+
+    1px solid
+    rgba(118, 199, 180, .28);
+
+
+  background:
+
+    linear-gradient(
+      145deg,
+      #102838,
+      #07141d
+    );
+
+
+  box-shadow:
+
+    0 20px 50px
+    rgba(0, 0, 0, .35);
+
 }
-.icon{
-  flex:none;width:40px;height:40px;border-radius:11px;display:grid;place-items:center;
-  color:var(--accent-soft);background:rgba(127,183,166,.10);
-  font-size:.72rem;font-weight:900;letter-spacing:.02em;
+
+
+/* =====================================================
+   TEXTO HERO
+===================================================== */
+
+.hero-content {
+
+  position: relative;
+
+  z-index: 2;
+
 }
-.link b{font-size:.92rem}.link span{display:block;margin-top:3px;color:var(--muted);font-size:.76rem}
-.highlight{
-  display:grid;grid-template-columns:1.2fr .8fr;gap:11px;
+
+
+.eyebrow {
+
+  color: var(--accent-light);
+
+  font-size: .74rem;
+
+  font-weight: 800;
+
+  letter-spacing: .22em;
+
+  text-transform: uppercase;
+
 }
-.project{
-  display:block;text-decoration:none;padding:19px;border-radius:17px;
-  border:1px solid var(--line);background:linear-gradient(145deg,rgba(127,183,166,.07),rgba(255,255,255,.018));
+
+
+h1 {
+
+  margin:
+
+    16px
+    0
+    14px;
+
+
+  font-size:
+
+    clamp(
+      2.7rem,
+      5vw,
+      5rem
+    );
+
+
+  line-height: .95;
+
+  letter-spacing: -.055em;
+
 }
-.project b{font-size:1rem}.project span{display:block;color:var(--muted);font-size:.8rem;line-height:1.5;margin-top:7px}
-.tags{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px}
-.tag{
-  border:1px solid var(--line);border-radius:999px;padding:6px 9px;
-  color:#b8c5c7;font-size:.69rem;background:rgba(255,255,255,.02)
+
+
+.subtitle {
+
+  font-size: 1.12rem;
+
+  color: #d5e1df;
+
+  margin-bottom: 25px;
+
 }
-.footer{
-  padding:22px 44px 28px;border-top:1px solid var(--line);
-  display:flex;justify-content:space-between;gap:18px;color:#6f7d85;font-size:.72rem
+
+
+.hero-line {
+
+  width: 70px;
+
+  height: 2px;
+
+  background:
+
+    linear-gradient(
+      90deg,
+      var(--accent),
+      transparent
+    );
+
+
+  margin-bottom: 22px;
+
 }
-@media(max-width:650px){
-  .page{width:94%;padding:14px 0}.hero,.section{padding:30px 22px}
-  .divider{margin:0 22px}.grid,.highlight{grid-template-columns:1fr}
-  .footer{padding:20px 22px;flex-direction:column}
+
+
+.institution {
+
+  color: var(--muted);
+
+  font-size: .96rem;
+
+  line-height: 1.65;
+
 }
+
+
+.institution strong {
+
+  color: var(--text);
+
+  font-size: 1.05rem;
+
+}
+
+
+/* =====================================================
+   BIO
+===================================================== */
+
+.bio {
+
+  margin-top: 20px;
+
+  max-width: 650px;
+
+  color: #b6c5c9;
+
+  line-height: 1.7;
+
+  font-size: .95rem;
+
+}
+
+
+/* =====================================================
+   TAGS DO HERO
+===================================================== */
+
+.hero-tags {
+
+  display: flex;
+
+  flex-wrap: wrap;
+
+  gap: 10px;
+
+  margin-top: 26px;
+
+}
+
+
+.hero-tag {
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 9px;
+
+
+  padding:
+
+    10px
+    16px;
+
+
+  border-radius: 999px;
+
+
+  border:
+
+    1px solid
+    rgba(118, 199, 180, .45);
+
+
+  background:
+
+    rgba(118, 199, 180, .05);
+
+
+  color: #dcebe7;
+
+  font-size: .8rem;
+
+  font-weight: 650;
+
+}
+
+
+.hero-tag::before {
+
+  content: "✦";
+
+  color: var(--accent);
+
+}
+
+
+/* =====================================================
+   DIVISOR
+===================================================== */
+
+.divider {
+
+  height: 1px;
+
+  margin: 0 48px;
+
+  background:
+
+    rgba(255, 255, 255, .08);
+
+}
+
+
+/* =====================================================
+   SEÇÕES
+===================================================== */
+
+.section {
+
+  padding:
+
+    34px
+    48px;
+
+}
+
+
+.section-title {
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 13px;
+
+
+  margin:
+
+    0
+    0
+    20px;
+
+
+  color: #b9cfcb;
+
+  font-size: .75rem;
+
+  letter-spacing: .24em;
+
+  text-transform: uppercase;
+
+}
+
+
+.section-title::before {
+
+  content: "";
+
+  width: 26px;
+
+  height: 2px;
+
+  background: var(--accent);
+
+}
+
+
+/* =====================================================
+   GRID DE LINKS
+===================================================== */
+
+.grid {
+
+  display: grid;
+
+  grid-template-columns:
+
+    repeat(
+      3,
+      minmax(0, 1fr)
+    );
+
+
+  gap: 14px;
+
+}
+
+
+/* =====================================================
+   CARDS DE LINK
+===================================================== */
+
+.link-card {
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 15px;
+
+
+  min-height: 96px;
+
+  padding: 16px;
+
+
+  text-decoration: none;
+
+
+  border-radius: 18px;
+
+
+  border:
+
+    1px solid
+    rgba(118, 199, 180, .20);
+
+
+  background:
+
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, .025),
+      rgba(255, 255, 255, .01)
+    );
+
+
+  transition:
+
+    transform .2s ease,
+    border-color .2s ease,
+    background .2s ease;
+
+}
+
+
+.link-card:hover {
+
+  transform:
+
+    translateY(-3px);
+
+
+  border-color:
+
+    rgba(118, 199, 180, .55);
+
+
+  background:
+
+    rgba(118, 199, 180, .06);
+
+}
+
+
+/* =====================================================
+   ÍCONES
+===================================================== */
+
+.icon {
+
+  width: 48px;
+
+  height: 48px;
+
+  flex: none;
+
+
+  display: grid;
+
+  place-items: center;
+
+
+  border-radius: 14px;
+
+
+  background:
+
+    rgba(118, 199, 180, .10);
+
+
+  color: var(--accent-light);
+
+
+  font-size: .85rem;
+
+  font-weight: 850;
+
+}
+
+
+.link-info {
+
+  min-width: 0;
+
+}
+
+
+.link-info b {
+
+  display: block;
+
+  font-size: .92rem;
+
+}
+
+
+.link-info span {
+
+  display: block;
+
+  margin-top: 4px;
+
+  color: var(--muted);
+
+  font-size: .76rem;
+
+  line-height: 1.4;
+
+}
+
+
+/* =====================================================
+   INSTITUIÇÕES
+===================================================== */
+
+.institution-card {
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 18px;
+
+
+  min-height: 120px;
+
+  padding: 16px;
+
+
+  border-radius: 18px;
+
+
+  border:
+
+    1px solid
+    rgba(118, 199, 180, .22);
+
+
+  background:
+
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, .025),
+      rgba(255, 255, 255, .008)
+    );
+
+
+  text-decoration: none;
+
+
+  transition:
+
+    transform .2s ease,
+    border-color .2s ease;
+
+}
+
+
+.institution-card:hover {
+
+  transform:
+
+    translateY(-3px);
+
+
+  border-color:
+
+    rgba(118, 199, 180, .55);
+
+}
+
+
+.institution-logo {
+
+  width: 90px;
+
+  height: 80px;
+
+  flex: none;
+
+
+  object-fit: contain;
+
+
+  padding: 5px;
+
+}
+
+
+.institution-info b {
+
+  display: block;
+
+  margin-bottom: 6px;
+
+  font-size: .95rem;
+
+}
+
+
+.institution-info span {
+
+  color: var(--muted);
+
+  font-size: .78rem;
+
+  line-height: 1.45;
+
+}
+
+
+/* =====================================================
+   PROJETOS
+===================================================== */
+
+.projects {
+
+  display: grid;
+
+  grid-template-columns:
+
+    repeat(
+      2,
+      minmax(0, 1fr)
+    );
+
+
+  gap: 16px;
+
+}
+
+
+.project {
+
+  display: grid;
+
+  grid-template-columns:
+
+    150px
+    1fr;
+
+
+  overflow: hidden;
+
+  min-height: 220px;
+
+
+  text-decoration: none;
+
+
+  border-radius: 20px;
+
+
+  border:
+
+    1px solid
+    rgba(118, 199, 180, .22);
+
+
+  background:
+
+    rgba(255, 255, 255, .015);
+
+
+  transition:
+
+    transform .2s ease,
+    border-color .2s ease;
+
+}
+
+
+.project:hover {
+
+  transform:
+
+    translateY(-4px);
+
+
+  border-color:
+
+    rgba(118, 199, 180, .55);
+
+}
+
+
+.project-image {
+
+  width: 100%;
+
+  height: 100%;
+
+  min-height: 220px;
+
+  object-fit: cover;
+
+}
+
+
+.project-content {
+
+  padding: 22px;
+
+}
+
+
+.project-title {
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 9px;
+
+
+  font-size: 1rem;
+
+  font-weight: 750;
+
+}
+
+
+.project-title::before {
+
+  content: "";
+
+  width: 9px;
+
+  height: 9px;
+
+  border-radius: 50%;
+
+  background: var(--accent);
+
+}
+
+
+.project-content p {
+
+  margin:
+
+    12px
+    0
+    16px;
+
+
+  color: var(--muted);
+
+  font-size: .82rem;
+
+  line-height: 1.65;
+
+}
+
+
+.tags {
+
+  display: flex;
+
+  flex-wrap: wrap;
+
+  gap: 7px;
+
+}
+
+
+.tag {
+
+  padding:
+
+    6px
+    10px;
+
+
+  border-radius: 999px;
+
+
+  border:
+
+    1px solid
+    rgba(118, 199, 180, .25);
+
+
+  color: #b9c9c7;
+
+  font-size: .68rem;
+
+}
+
+
+/* =====================================================
+   FOOTER
+===================================================== */
+
+.footer {
+
+  display: grid;
+
+  grid-template-columns:
+
+    1fr
+    1fr
+    1fr;
+
+
+  align-items: center;
+
+
+  gap: 20px;
+
+
+  padding:
+
+    28px
+    48px;
+
+
+  border-top:
+
+    1px solid
+    rgba(255, 255, 255, .08);
+
+
+  color: #72838b;
+
+  font-size: .75rem;
+
+}
+
+
+.footer-center {
+
+  text-align: center;
+
+}
+
+
+.footer-right {
+
+  text-align: right;
+
+}
+
+
+/* =====================================================
+   RESPONSIVO
+===================================================== */
+
+@media (max-width: 900px) {
+
+  .hero {
+
+    grid-template-columns:
+
+      240px
+      1fr;
+
+  }
+
+
+  .profile-photo {
+
+    width: 230px;
+
+    height: 290px;
+
+  }
+
+
+  .grid {
+
+    grid-template-columns:
+
+      repeat(
+        2,
+        1fr
+      );
+
+  }
+
+
+  .project {
+
+    grid-template-columns:
+
+      130px
+      1fr;
+
+  }
+
+}
+
+
+@media (max-width: 650px) {
+
+  .page {
+
+    width: 94%;
+
+    padding:
+
+      14px
+      0
+      24px;
+
+  }
+
+
+  .hero {
+
+    grid-template-columns: 1fr;
+
+    padding:
+
+      32px
+      24px;
+
+    gap: 24px;
+
+  }
+
+
+  .profile-area {
+
+    justify-content: flex-start;
+
+  }
+
+
+  .profile-photo {
+
+    width: 180px;
+
+    height: 220px;
+
+  }
+
+
+  .divider {
+
+    margin:
+
+      0
+      24px;
+
+  }
+
+
+  .section {
+
+    padding:
+
+      30px
+      24px;
+
+  }
+
+
+  .grid {
+
+    grid-template-columns: 1fr;
+
+  }
+
+
+  .projects {
+
+    grid-template-columns: 1fr;
+
+  }
+
+
+  .project {
+
+    grid-template-columns:
+
+      120px
+      1fr;
+
+  }
+
+
+  .project-image {
+
+    min-height: 100%;
+
+  }
+
+
+  .footer {
+
+    grid-template-columns: 1fr;
+
+    text-align: left;
+
+    padding:
+
+      24px;
+
+  }
+
+
+  .footer-center,
+  .footer-right {
+
+    text-align: left;
+
+  }
+
+
+  h1 {
+
+    font-size: 3rem;
+
+  }
+
+}
+
 </style>
+
 </head>
+
+
 <body>
+
+
 <main class="page">
+
+
 <article class="card">
 
+
+<!-- =====================================================
+     HERO
+===================================================== -->
+
 <header class="hero">
-  <div class="eyebrow">Perfil profissional · Cartão digital</div>
-  <h1>Maurício Rodrigo Schmitt</h1>
-  <div class="subtitle">Professor · Pesquisador · Paleontólogo</div>
-  <div class="institution">
-    <strong>Universidade do Contestado — UNC</strong><br>
-    CENPALEO · Programa de Mestrado em Engenharia Civil, Sanitária e Ambiental
+
+
+  <!-- FOTO -->
+
+  <div class="profile-area">
+
+    <img
+      src="perfil.png"
+      alt="Maurício Rodrigo Schmitt"
+      class="profile-photo"
+    >
+
   </div>
+
+
+
+  <!-- TEXTO -->
+
+  <div class="hero-content">
+
+
+    <div class="eyebrow">
+
+      Professor · Pesquisador · Paleontólogo
+
+    </div>
+
+
+    <h1>
+
+      Maurício<br>
+      Rodrigo Schmitt
+
+    </h1>
+
+
+    <div class="hero-line"></div>
+
+
+    <div class="institution">
+
+      <strong>
+
+        Universidade do Contestado — UNC
+
+      </strong>
+
+      <br>
+
+      CENPALEO · PMPECSA
+
+    </div>
+
+
+    <p class="bio">
+
+      Pesquisador interessado em compreender o passado geológico
+      e paleobiológico e em transformar ciência e conhecimento
+      técnico em informações acessíveis à sociedade.
+
+    </p>
+
+
+    <div class="hero-tags">
+
+      <span class="hero-tag">
+        Paleontologia
+      </span>
+
+      <span class="hero-tag">
+        Geociências
+      </span>
+
+      <span class="hero-tag">
+        Sensoriamento remoto
+      </span>
+
+      <span class="hero-tag">
+        Meio ambiente
+      </span>
+
+    </div>
+
+
+  </div>
+
+
 </header>
+
 
 <div class="divider"></div>
 
+
+
+<!-- =====================================================
+     PESQUISA
+===================================================== -->
+
 <section class="section">
-  <h2 class="label">Pesquisa &amp; trajetória acadêmica</h2>
+
+
+  <h2 class="section-title">
+
+    Pesquisa &amp; trajetória acadêmica
+
+  </h2>
+
+
   <div class="grid">
 
-    <a class="link" href="http://lattes.cnpq.br/3332737402985747" target="_blank" rel="noopener">
-      <div class="icon">CV</div>
-      <div><b>Currículo Lattes</b><span>Trajetória e produção científica</span></div>
-    </a>
 
-    <a class="link" href="https://orcid.org/0000-0002-4235-9180" target="_blank" rel="noopener">
-      <div class="icon">iD</div>
-      <div><b>ORCID</b><span>Identificador de pesquisador</span></div>
-    </a>
+    <a
+      class="link-card"
+      href="http://lattes.cnpq.br/3332737402985747"
+      target="_blank"
+      rel="noopener"
+    >
 
-    <a class="link" href="https://scholar.google.com.br/citations?user=54kO9jkAAAAJ&hl=pt-BR" target="_blank" rel="noopener">
-      <div class="icon">GS</div>
-      <div><b>Google Scholar</b><span>Publicações e citações</span></div>
-    </a>
-
-    <a class="link" href="https://www.linkedin.com/in/mauricio-rodrigo-schmitt-67b3058b/" target="_blank" rel="noopener">
-      <div class="icon">in</div>
-      <div><b>LinkedIn</b><span>Perfil profissional</span></div>
-    </a>
-
-    <a class="link" href="https://www.researchgate.net/profile/Mauricio-Schmitt?ev=hdr_xprf" target="_blank" rel="noopener">
-      <div class="icon">RG</div>
-      <div><b>ResearchGate</b><span>Pesquisas e publicações</span></div>
-    </a>
-
-    <a class="link" href="COLE_AQUI_SEU_GITHUB" target="_blank" rel="noopener">
-      <div class="icon">GH</div>
-      <div><b>GitHub</b><span>Código, dados e projetos</span></div>
-    </a>
-
-  </div>
-</section>
-
-<section class="section" style="padding-top:0">
-  <h2 class="label">Contato</h2>
-  <div class="grid">
-
-    <a class="link" href="mailto:mauricio.schmitt@yahoo.com.br">
-      <div class="icon">@</div>
-      <div><b>E-mail</b><span>Contato profissional</span></div>
-    </a>
-
-    <a class="link" href="51982010295" target="_blank" rel="noopener">
-      <div class="icon">WA</div>
-      <div><b>WhatsApp</b><span>Contato direto</span></div>
-    </a>
-
-  </div>
-</section>
-
-<section class="section" style="padding-top:0">
-  <h2 class="label">Universidade do Contestado</h2>
-  <div class="grid">
-
-    <a class="link" href="https://cenpaleo.unc.br/" target="_blank" rel="noopener">
-      <div class="icon">CP</div>
-      <div><b>CENPALEO</b><span>Centro de Pesquisa Paleontológica</span></div>
-    </a>
-
-    <a class="link" href="https://unc.br/ensino/cursos/programa-de-mestrado-profissional-em-engenharia-civil-sanitaria-e-ambiental-pmpecsa" target="_blank" rel="noopener">
-      <div class="icon">PE</div>
-      <div><b>PMPECSA</b><span>Mestrado em Engenharia Civil, Sanitária e Ambiental</span></div>
-    </a>
-
-    <a class="link" href="https://unc.br/" target="_blank" rel="noopener">
-      <div class="icon">UNC</div>
-      <div><b>Universidade do Contestado</b><span>Instituição</span></div>
-    </a>
-
-  </div>
-</section>
-
-<section class="section" style="padding-top:0">
-  <h2 class="label">Projetos em destaque</h2>
-  <div class="highlight">
-
-    <a class="project" href="https://mauriciorschmitt.github.io/saolourencoalert/" target="_blank" rel="noopener">
-      <b>São Lourenço Alert</b>
-      <span>Sistema de monitoramento e alerta para mudanças na cobertura de macrófitas aquáticas no reservatório São Lourenço.</span>
-      <div class="tags">
-        <span class="tag">Sensoriamento remoto</span>
-        <span class="tag">Sentinel-2</span>
-        <span class="tag">Monitoramento ambiental</span>
+      <div class="icon">
+        CV
       </div>
+
+      <div class="link-info">
+
+        <b>
+          Currículo Lattes
+        </b>
+
+        <span>
+          Trajetória e produção científica
+        </span>
+
+      </div>
+
     </a>
 
-    <div class="project">
-      <b>CENPALEO</b>
-      <span>Pesquisa, acervo, patrimônio paleontológico e divulgação científica.</span>
-      <div class="tags">
-        <span class="tag">Paleontologia</span>
-        <span class="tag">Geociências</span>
+
+
+    <a
+      class="link-card"
+      href="https://orcid.org/0000-0002-4235-9180"
+      target="_blank"
+      rel="noopener"
+    >
+
+      <div class="icon">
+        iD
       </div>
-    </div>
+
+      <div class="link-info">
+
+        <b>
+          ORCID
+        </b>
+
+        <span>
+          Identificador de pesquisador
+        </span>
+
+      </div>
+
+    </a>
+
+
+
+    <a
+      class="link-card"
+      href="https://scholar.google.com.br/citations?user=54kO9jkAAAAJ&hl=pt-BR"
+      target="_blank"
+      rel="noopener"
+    >
+
+      <div class="icon">
+        GS
+      </div>
+
+      <div class="link-info">
+
+        <b>
+          Google Scholar
+        </b>
+
+        <span>
+          Publicações e citações
+        </span>
+
+      </div>
+
+    </a>
+
+
+
+    <a
+      class="link-card"
+      href="https://www.linkedin.com/in/mauricio-rodrigo-schmitt-67b3058b/"
+      target="_blank"
+      rel="noopener"
+    >
+
+      <div class="icon">
+        in
+      </div>
+
+      <div class="link-info">
+
+        <b>
+          LinkedIn
+        </b>
+
+        <span>
+          Perfil profissional
+        </span>
+
+      </div>
+
+    </a>
+
+
+
+    <a
+      class="link-card"
+      href="https://www.researchgate.net/profile/Mauricio-Schmitt"
+      target="_blank"
+      rel="noopener"
+    >
+
+      <div class="icon">
+        RG
+      </div>
+
+      <div class="link-info">
+
+        <b>
+          ResearchGate
+        </b>
+
+        <span>
+          Pesquisas e publicações
+        </span>
+
+      </div>
+
+    </a>
+
 
   </div>
+
+
 </section>
+
+
+
+<!-- =====================================================
+     CONTATO
+===================================================== -->
+
+<section class="section">
+
+
+  <h2 class="section-title">
+
+    Contato
+
+  </h2>
+
+
+  <div class="grid">
+
+
+    <!-- EMAIL -->
+
+    <a
+      class="link-card"
+      href="mailto:mauricio.schmitt@yahoo.com.br"
+    >
+
+      <div class="icon">
+        @
+      </div>
+
+      <div class="link-info">
+
+        <b>
+          E-mail
+        </b>
+
+        <span>
+          mauricio.schmitt@yahoo.com.br
+        </span>
+
+      </div>
+
+    </a>
+
+
+
+    <!-- WHATSAPP -->
+
+    <a
+      class="link-card"
+      href="https://wa.me/5551982010295"
+      target="_blank"
+      rel="noopener"
+    >
+
+      <div class="icon">
+        WA
+      </div>
+
+      <div class="link-info">
+
+        <b>
+          WhatsApp
+        </b>
+
+        <span>
+          +55 51 98201-0295
+        </span>
+
+      </div>
+
+    </a>
+
+
+
+    <!-- INSTAGRAM -->
+
+    <a
+      class="link-card"
+      href="https://www.instagram.com/mauriciorschmitt/"
+      target="_blank"
+      rel="noopener"
+    >
+
+      <div class="icon">
+        IG
+      </div>
+
+      <div class="link-info">
+
+        <b>
+          Instagram
+        </b>
+
+        <span>
+          @mauriciorschmitt
+        </span>
+
+      </div>
+
+    </a>
+
+
+  </div>
+
+
+</section>
+
+
+
+<!-- =====================================================
+     INSTITUIÇÕES
+===================================================== -->
+
+<section class="section">
+
+
+  <h2 class="section-title">
+
+    Universidade do Contestado
+
+  </h2>
+
+
+  <div class="grid">
+
+
+    <!-- CENPALEO -->
+
+    <a
+      class="institution-card"
+      href="https://cenpaleo.unc.br/"
+      target="_blank"
+      rel="noopener"
+    >
+
+      <img
+        src="cenpaleo.png"
+        alt="CENPALEO"
+        class="institution-logo"
+      >
+
+
+      <div class="institution-info">
+
+        <b>
+          CENPALEO
+        </b>
+
+        <span>
+          Centro de Pesquisa Paleontológica
+        </span>
+
+      </div>
+
+    </a>
+
+
+
+    <!-- PMPECSA -->
+
+    <a
+      class="institution-card"
+      href="https://unc.br/ensino/cursos/programa-de-mestrado-profissional-em-engenharia-civil-sanitaria-e-ambiental-pmpecsa"
+      target="_blank"
+      rel="noopener"
+    >
+
+      <img
+        src="WhatsApp Image 2026-06-02 at 21.40.01A.jpeg"
+        alt="PMPECSA"
+        class="institution-logo"
+      >
+
+
+      <div class="institution-info">
+
+        <b>
+          PMPECSA
+        </b>
+
+        <span>
+          Programa de Mestrado Profissional em Engenharia Civil,
+          Sanitária e Ambiental
+        </span>
+
+      </div>
+
+    </a>
+
+
+
+    <!-- UNC -->
+
+    <a
+      class="institution-card"
+      href="https://unc.br/"
+      target="_blank"
+      rel="noopener"
+    >
+
+      <img
+        src="UNC 2021_alternativo.png"
+        alt="Universidade do Contestado"
+        class="institution-logo"
+      >
+
+
+      <div class="institution-info">
+
+        <b>
+          Universidade do Contestado
+        </b>
+
+        <span>
+          Ensino, pesquisa e extensão
+        </span>
+
+      </div>
+
+    </a>
+
+
+  </div>
+
+
+</section>
+
+
+
+<!-- =====================================================
+     PROJETOS
+===================================================== -->
+
+<section class="section">
+
+
+  <h2 class="section-title">
+
+    Projetos em destaque
+
+  </h2>
+
+
+  <div class="projects">
+
+
+    <!-- SÃO LOURENÇO ALERT -->
+
+    <a
+      class="project"
+      href="https://mauriciorschmitt.github.io/saolourencoalert/"
+      target="_blank"
+      rel="noopener"
+    >
+
+
+      <!--
+      Depois podemos trocar por uma imagem do reservatório.
+      -->
+
+      <img
+        src="https://images.unsplash.com/photo-1432405972618-c60b0225b8f9?auto=format&fit=crop&w=700&q=80"
+        alt="São Lourenço Alert"
+        class="project-image"
+      >
+
+
+      <div class="project-content">
+
+
+        <div class="project-title">
+
+          São Lourenço Alert
+
+        </div>
+
+
+        <p>
+
+          Sistema de monitoramento e alerta para mudanças
+          na cobertura de macrófitas aquáticas no
+          reservatório São Lourenço.
+
+        </p>
+
+
+        <div class="tags">
+
+          <span class="tag">
+            Sentinel-2
+          </span>
+
+          <span class="tag">
+            Sensoriamento remoto
+          </span>
+
+          <span class="tag">
+            Monitoramento ambiental
+          </span>
+
+        </div>
+
+
+      </div>
+
+
+    </a>
+
+
+
+    <!-- CENPALEO -->
+
+    <a
+      class="project"
+      href="https://cenpaleo.unc.br/"
+      target="_blank"
+      rel="noopener"
+    >
+
+
+      <!--
+      Depois podemos colocar uma foto real de um fóssil
+      ou do acervo do CENPALEO.
+      -->
+
+      <img
+        src="https://images.unsplash.com/photo-1614728263952-84ea256f9679?auto=format&fit=crop&w=700&q=80"
+        alt="Pesquisa paleontológica"
+        class="project-image"
+      >
+
+
+      <div class="project-content">
+
+
+        <div class="project-title">
+
+          CENPALEO
+
+        </div>
+
+
+        <p>
+
+          Pesquisa, acervo, patrimônio paleontológico
+          e divulgação científica.
+
+        </p>
+
+
+        <div class="tags">
+
+          <span class="tag">
+            Paleontologia
+          </span>
+
+          <span class="tag">
+            Geociências
+          </span>
+
+        </div>
+
+
+      </div>
+
+
+    </a>
+
+
+  </div>
+
+
+</section>
+
+
+
+<!-- =====================================================
+     FOOTER
+===================================================== -->
 
 <footer class="footer">
-  <span>© 2026 Maurício Rodrigo Schmitt</span>
-  <span>Cartão digital · acesso por QR Code</span>
+
+
+  <div>
+
+    © 2026 Maurício Rodrigo Schmitt
+
+  </div>
+
+
+  <div class="footer-center">
+
+    Professor · Pesquisador · Paleontólogo
+
+  </div>
+
+
+  <div class="footer-right">
+
+    Cartão digital · Acesso por QR Code
+
+  </div>
+
+
 </footer>
 
+
 </article>
+
+
 </main>
+
+
 </body>
+
 </html>
