@@ -1,13 +1,13 @@
 {
-  "updated_at": "2026-08-17T19:36:59.924223+00:00",
-  "date": "2026-08-01",
-  "ndvi": -0.1454162162490574,
-  "ndwi": 0.245604856456313,
-  "ndmi": 0.28987208327897135,
-  "cloud_pct": 0.0,
-  "valid_fraction": 1.0,
-  "zscore": -2.0424202703909162,
-  "status": "NORMAL",
+  "updated_at": "2026-08-24T10:58:04.777546+00:00",
+  "date": "2026-08-21",
+  "ndvi": 0.22679804498329764,
+  "ndwi": -0.1802433648012562,
+  "ndmi": 0.0806290281602313,
+  "cloud_pct": 80.64147928318685,
+  "valid_fraction": 0.1935852071681315,
+  "zscore": 2.061897264678594,
+  "status": "ALERTA",
   "cloud_threshold": 10,
   "cloud_note": "Cobertura estimada pela máscara SCL na área de estudo; 10% é apenas referência e não bloqueia o envio."
 }
