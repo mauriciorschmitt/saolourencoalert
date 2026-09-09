@@ -1,113 +1,109 @@
 #!/usr/bin/env python3
 """
-monitor_ndvi.py
-================
-Automated NDVI monitoring for the Sao Lourenco Reservoir (Mafra, SC, Brazil).
+monitor_ndvi.py  –  v3
+========================
+Monitoramento automatizado do Reservatório São Lourenço (Mafra, SC).
 
-What it does, every time it runs:
-  1. Authenticates with the Copernicus Data Space Ecosystem (Sentinel Hub
-     Statistical API) using OAuth2 client credentials.
-  2. Requests NDVI statistics for the reservoir ROI for the most recent
-     ~30-day window, uses the SCL cloud mask to calculate indices, but does NOT discard the latest scene merely because cloud cover exceeds 10%.
-  3. Picks the most recent scene with at least a small fraction of valid pixels.
-  4. Compares its NDVI value against the historical monthly climatology
-     (mean and SD computed from the pre-outbreak baseline, 2016-2024, in
-     the paper), using the same z-score anomaly method used in the article.
-  5. Renders a side-by-side image panel (true color | NDVI | NDWI) for that
-     same date and geometry (Sentinel Hub Process API).
-  6. Sends the numeric result via Telegram and/or email, every run -- with
-     the image panel attached. If image rendering fails for any reason, the
-     text alert is still sent (the image is best-effort, never blocking).
-
-This is meant to be run on a schedule (see the GitHub Actions workflow in
-.github/workflows/ndvi_monitor.yml) -- it is a single-shot script, not a
-long-running service.
-
-REQUIRED SETUP BEFORE FIRST RUN
---------------------------------
-1. Fill in MONTHLY_CLIMATOLOGY below with the mean/SD values from your
-   "Monthly_Climatology" sheet in Salvinia_Outbreak_Statistical_Results.xlsx
-   (pre-outbreak period only, one row per calendar month).
-2. Fill in ROI_GEOJSON below with your reservoir polygon (convert your KML
-   to GeoJSON once, e.g. at https://mygeodata.cloud/converter/kml-to-geojson,
-   and paste the "coordinates" array here).
-3. Set the following as GitHub Actions secrets (Settings > Secrets and
-   variables > Actions) -- never hard-code these in the script:
-     SH_CLIENT_ID, SH_CLIENT_SECRET   (Copernicus Sentinel Hub OAuth client)
-     TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-     EMAIL_ADDRESS, EMAIL_APP_PASSWORD, ALERT_EMAIL_TO
-   See SETUP_GUIDE.md for how to obtain each of these.
+O que este script faz em cada execução
+----------------------------------------
+1.  Autentica via OAuth2 no Copernicus Data Space Ecosystem (token único
+    gerado uma vez e reutilizado em todas as chamadas).
+2.  Consulta a API Estatística do Sentinel Hub para a janela dos últimos
+    LOOKBACK_DAYS dias, obtendo NDVI, NDWI e NDMI para TODAS as cenas
+    com pelo menos MIN_VALID_FRACTION de pixels válidos (pós-mascaramento
+    SCL de nuvens).
+3.  Identifica a "melhor cena" (menor cobertura de nuvens) e a usa para
+    o alerta semanal e para o z-score.
+4.  Gera um painel de imagem composto (cor real | NDVI | NDWI) para a
+    melhor cena e para qualquer cena adicional ainda sem imagem no arquivo.
+5.  Persiste:
+      docs/data/ultimo.json          → estado mais recente (melhor cena)
+      docs/data/historico.csv        → série histórica acumulada
+      docs/data/passagens_30d.json   → TODAS as cenas do período + flag "best"
+      docs/images/latest/panel.png   → painel da melhor cena
+      docs/images/archive/YYYY-MM-DD/panel.png → arquivo por data
+6.  Envia notificações via Telegram, e-mail e/ou WhatsApp (CallMeBot).
+7.  Todas as chamadas HTTP têm retry com backoff exponencial.
 """
 
-import os
-import sys
-import json
-import smtplib
+import csv
 import datetime as dt
+import io
+import json
+import logging
+import os
+import smtplib
+import sys
+import time
+import uuid
+from email.mime.image import MIMEImage
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from pathlib import Path
 
 import requests
 from pyproj import Transformer
 
-# ---------------------------------------------------------------------------
-# 1. CONFIGURATION -- edit this section
-# ---------------------------------------------------------------------------
+# ── Logging estruturado ──────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)-8s %(name)s  %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%SZ",
+    stream=sys.stdout,
+)
+log = logging.getLogger("monitor_ndvi")
 
-# Monthly climatology for NDVI, computed from the PRE-OUTBREAK period only
-# (same reference used in the paper's anomaly analysis, Section 2.4 / 3.7).
-# Copy these 12 values from the "Monthly_Climatology" sheet in your
-# Salvinia_Outbreak_Statistical_Results.xlsx file (ndvi_clim_mean, ndvi_clim_sd).
-# PLACEHOLDER VALUES BELOW -- REPLACE BEFORE FIRST RUN.
+# ═══════════════════════════════════════════════════════════════════════════════
+# 1. CONFIGURAÇÃO
+# ═══════════════════════════════════════════════════════════════════════════════
+
+SCHEMA_VERSION = "3.0"
+
+# Climatologia mensal de referência (período pré-surto, 2016-2024).
+# Copie estes valores da planilha Salvinia_Outbreak_Statistical_Results.xlsx,
+# aba Monthly_Climatology (colunas ndvi_clim_mean e ndvi_clim_sd).
 MONTHLY_CLIMATOLOGY = {
-    1:  {"mean": 0.062983286, "sd": 0.022422375},
-    2:  {"mean": 0.102973448, "sd": 0.056671219},
-    3:  {"mean": 0.129464011, "sd": 0.060937651},
-    4:  {"mean": 0.131759039, "sd": 0.077113975},
-    5:  {"mean": 0.081960490, "sd": 0.097855931},
-    6:  {"mean": 0.005082073, "sd": 0.091559002},
-    7:  {"mean": 0.058218087, "sd": 0.097758882},
-    8:  {"mean": 0.039807745, "sd": 0.090688466},
-    9:  {"mean": 0.052855900, "sd": 0.074378438},
+    1:  {"mean":  0.062983286, "sd": 0.022422375},
+    2:  {"mean":  0.102973448, "sd": 0.056671219},
+    3:  {"mean":  0.129464011, "sd": 0.060937651},
+    4:  {"mean":  0.131759039, "sd": 0.077113975},
+    5:  {"mean":  0.081960490, "sd": 0.097855931},
+    6:  {"mean":  0.005082073, "sd": 0.091559002},
+    7:  {"mean":  0.058218087, "sd": 0.097758882},
+    8:  {"mean":  0.039807745, "sd": 0.090688466},
+    9:  {"mean":  0.052855900, "sd": 0.074378438},
     10: {"mean": -0.065839763, "sd": 0.137611379},
-    11: {"mean": 0.079915785, "sd": 0.091192902},
-    12: {"mean": 0.017970982, "sd": 0.152124149},
+    11: {"mean":  0.079915785, "sd": 0.091192902},
+    12: {"mean":  0.017970982, "sd": 0.152124159},
 }
 
-
-# Reservoir ROI is stored separately in data/roi.geojson so it is easy to maintain.
-ROI_PATH = os.path.join(os.path.dirname(__file__), "data", "roi.geojson")
+ROI_PATH = Path(__file__).parent / "data" / "roi.geojson"
 with open(ROI_PATH, "r", encoding="utf-8") as _f:
     ROI_GEOJSON = json.load(_f)
 
-CLOUD_THRESHOLD = 10          # percent; informational only, NOT a filter
-ALERT_Z_THRESHOLD = 2.0       # SD, same as used in the paper (Section 2.4/3.7)
-LOOKBACK_DAYS = 30            # how far back to search for the latest Sentinel-2 image
-MIN_VALID_FRACTION = 0.01     # accept scenes with very high cloud cover; only reject ~100% masked scenes
+CLOUD_THRESHOLD    = 10     # % — informativo, não bloqueia
+ALERT_Z_THRESHOLD  = 2.0   # desvios-padrão (mesmo do artigo)
+ATTENTION_Z        = 1.5   # limiar intermediário
+LOOKBACK_DAYS      = 30    # janela de busca
+MIN_VALID_FRACTION = 0.01  # descarta apenas cenas ~100% nubladas
 
-# Number of 10m pixels that fall INSIDE the reservoir polygon (not its
-# bounding box). The Statistical API on the Copernicus Dataspace Ecosystem
-# does not return "geometryPixelCount" in the response, so we can't read
-# this back from the API directly -- it's derived instead from:
-#   (a) the reservoir's mapped area (~794,900 m^2 in UTM 22S) / 100 m^2 per
-#       10x10m pixel =~ 7,949 pixels (theoretical), and
-#   (b) the actual max "valid_px" observed across several clear-sky days in
-#       this window (8,761 pixels) -- used here since it reflects exactly
-#       how Sentinel Hub rasterizes this specific polygon.
-# If you ever redraw/replace ROI_GEOJSON, recompute this: temporarily set
-# CLOUD_THRESHOLD very high, run with the debug logging on, and take the
-# largest "valid_px" seen across a handful of clearly cloud-free dates.
+# Pixels dentro do polígono (não da bounding box). Ver artigo, Seção 2.2.
+# Para recalibrar: rode com MIN_VALID_FRACTION=0.001, colete os maiores
+# valores de valid_px em datas visivelmente sem nuvem e use o maior.
 GEOMETRY_PIXEL_COUNT = 8761
 
-SH_TOKEN_URL = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
-SH_STATS_URL = "https://sh.dataspace.copernicus.eu/api/v1/statistics"
+HTTP_MAX_RETRIES = 4
+HTTP_BACKOFF_BASE = 2  # segundos (dobra a cada tentativa)
 
-# NDVI evalscript (same band math as the paper: (B08 - B04) / (B08 + B04))
-# Cloud filtering uses the Scene Classification Layer (SCL), not just the
-# generic dataMask -- dataMask alone only means "the sensor has SOME reading
-# here" (e.g. inside the swath), it does NOT mean "this pixel is cloud-free".
-# SCL classes excluded here: 3 = cloud shadow, 8 = cloud (medium probability),
-# 9 = cloud (high probability), 10 = thin cirrus. (Class 11, snow/ice, is left
-# in since it's not relevant for this reservoir; add it here if needed.)
+SH_TOKEN_URL   = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
+SH_STATS_URL   = "https://sh.dataspace.copernicus.eu/api/v1/statistics"
+SH_PROCESS_URL = "https://sh.dataspace.copernicus.eu/api/v1/process"
+PANEL_IMAGE_SIZE = 512
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 2. EVALSCRIPTS (inalterados — mesma matemática de bandas do artigo)
+# ═══════════════════════════════════════════════════════════════════════════════
+
 EVALSCRIPT_INDICES = """
 //VERSION=3
 function setup() {
@@ -122,23 +118,15 @@ function setup() {
   };
 }
 function evaluatePixel(s) {
+  // SCL: 3=sombra, 8=nuvem média, 9=nuvem alta, 10=cirro fino
   let isCloud = (s.SCL == 3 || s.SCL == 8 || s.SCL == 9 || s.SCL == 10);
   let valid = s.dataMask == 1 && !isCloud;
   let ndvi = (s.B08 + s.B04) == 0 ? 0 : (s.B08 - s.B04) / (s.B08 + s.B04);
   let ndwi = (s.B03 + s.B08) == 0 ? 0 : (s.B03 - s.B08) / (s.B03 + s.B08);
-  // NDMI = (NIR - SWIR1) / (NIR + SWIR1). B11 is 20 m; the API resamples it to 10 m.
-  // It is intentionally included below as an input band.
   let ndmi = (s.B08 + s.B11) == 0 ? 0 : (s.B08 - s.B11) / (s.B08 + s.B11);
   return { ndvi: [ndvi], ndwi: [ndwi], ndmi: [ndmi], dataMask: [valid ? 1 : 0] };
 }
 """
-
-# ---------------------------------------------------------------------------
-# 2a. VISUALIZATION EVALSCRIPTS (for the image panel attached to alerts)
-# ---------------------------------------------------------------------------
-# These render actual RGB images (Process API), not statistics. Cloud/cloud
-# shadow pixels (same SCL classes as EVALSCRIPT_NDVI above) are painted
-# light grey so a cloudy scene is visually obvious rather than misleading.
 
 EVALSCRIPT_TRUECOLOR = """
 //VERSION=3
@@ -150,11 +138,9 @@ function setup() {
 }
 function evaluatePixel(s) {
   let isCloud = (s.SCL == 3 || s.SCL == 8 || s.SCL == 9 || s.SCL == 10);
-  if (s.dataMask == 0) { return [1, 1, 1]; }
-  if (isCloud) { return [0.85, 0.85, 0.85]; }
-  // simple gain + gamma, standard true-color stretch for Sentinel-2 L2A
-  let gain = 3.0;
-  let gamma = 1.8;
+  if (s.dataMask == 0) return [1, 1, 1];
+  if (isCloud) return [0.85, 0.85, 0.85];
+  let gain = 3.0, gamma = 1.8;
   return [
     Math.pow(s.B04 * gain, 1 / gamma),
     Math.pow(s.B03 * gain, 1 / gamma),
@@ -163,18 +149,14 @@ function evaluatePixel(s) {
 }
 """
 
-# Shared green<->brown diverging ramp for NDVI: browns/tans for low or
-# negative values (open water, bare soil), greens for high values (dense
-# vegetation) -- matches the color logic used for Figure 7 in the paper.
-_NDVI_COLOR_RAMP_JS = """
+_NDVI_COLOR_RAMP = """
 function ndviColor(v) {
-  // v in [-1, 1]
-  if (v < -0.2) return [0.65, 0.55, 0.40];   // water / non-vegetated -> tan
+  if (v < -0.2) return [0.65, 0.55, 0.40];
   if (v < 0.0)  return [0.80, 0.75, 0.55];
   if (v < 0.2)  return [0.90, 0.88, 0.55];
   if (v < 0.4)  return [0.65, 0.80, 0.35];
   if (v < 0.6)  return [0.30, 0.65, 0.20];
-  return [0.05, 0.45, 0.05];                 // dense vegetation -> dark green
+  return [0.05, 0.45, 0.05];
 }
 """
 
@@ -186,26 +168,22 @@ function setup() {
     output: { bands: 3, sampleType: "AUTO" }
   };
 }
-""" + _NDVI_COLOR_RAMP_JS + """
+""" + _NDVI_COLOR_RAMP + """
 function evaluatePixel(s) {
   let isCloud = (s.SCL == 3 || s.SCL == 8 || s.SCL == 9 || s.SCL == 10);
-  if (s.dataMask == 0) { return [1, 1, 1]; }
-  if (isCloud) { return [0.85, 0.85, 0.85]; }
-  let ndvi = (s.B08 - s.B04) / (s.B08 + s.B04);
-  return ndviColor(ndvi);
+  if (s.dataMask == 0) return [1, 1, 1];
+  if (isCloud) return [0.85, 0.85, 0.85];
+  return ndviColor((s.B08 - s.B04) / (s.B08 + s.B04));
 }
 """)
 
-# Blue diverging ramp for NDWI: dark blue for open water (high NDWI), tan
-# for vegetated/dry surface (low or negative NDWI).
-_NDWI_COLOR_RAMP_JS = """
+_NDWI_COLOR_RAMP = """
 function ndwiColor(v) {
-  // v in [-1, 1]
-  if (v < -0.2) return [0.80, 0.75, 0.55];   // vegetated / dry -> tan
+  if (v < -0.2) return [0.80, 0.75, 0.55];
   if (v < 0.0)  return [0.85, 0.85, 0.65];
   if (v < 0.2)  return [0.65, 0.80, 0.90];
   if (v < 0.4)  return [0.30, 0.60, 0.85];
-  return [0.05, 0.25, 0.65];                 // open water -> dark blue
+  return [0.05, 0.25, 0.65];
 }
 """
 
@@ -217,119 +195,138 @@ function setup() {
     output: { bands: 3, sampleType: "AUTO" }
   };
 }
-""" + _NDWI_COLOR_RAMP_JS + """
+""" + _NDWI_COLOR_RAMP + """
 function evaluatePixel(s) {
   let isCloud = (s.SCL == 3 || s.SCL == 8 || s.SCL == 9 || s.SCL == 10);
-  if (s.dataMask == 0) { return [1, 1, 1]; }
-  if (isCloud) { return [0.85, 0.85, 0.85]; }
-  let ndwi = (s.B03 - s.B08) / (s.B03 + s.B08);
-  return ndwiColor(ndwi);
+  if (s.dataMask == 0) return [1, 1, 1];
+  if (isCloud) return [0.85, 0.85, 0.85];
+  return ndwiColor((s.B03 - s.B08) / (s.B03 + s.B08));
 }
 """)
 
-SH_PROCESS_URL = "https://sh.dataspace.copernicus.eu/api/v1/process"
-PANEL_IMAGE_SIZE = 512   # pixels, per sub-image (longer side); keeps requests small/fast
+# ═══════════════════════════════════════════════════════════════════════════════
+# 3. HTTP COM RETRY E BACKOFF EXPONENCIAL
+# ═══════════════════════════════════════════════════════════════════════════════
 
+def _http_post(url, *, max_retries=HTTP_MAX_RETRIES, backoff=HTTP_BACKOFF_BASE, **kwargs):
+    """
+    requests.post() com retry automático para erros transitórios (5xx,
+    timeout, ConnectionError). Erros 4xx não são retentados — indicam
+    problema de configuração, não de rede.
+    """
+    last_exc = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = requests.post(url, **kwargs)
+            if resp.status_code == 429:
+                wait = int(resp.headers.get("Retry-After", backoff * attempt))
+                log.warning("Rate-limited (429); aguardando %ds.", wait)
+                time.sleep(wait)
+                continue
+            if resp.status_code >= 500:
+                log.warning("Servidor %d na tentativa %d/%d; retentando...",
+                            resp.status_code, attempt, max_retries)
+                time.sleep(backoff ** attempt)
+                continue
+            return resp
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            last_exc = exc
+            wait = backoff ** attempt
+            log.warning("Erro de rede (%s); tentativa %d/%d – aguardando %.0fs.",
+                        exc, attempt, max_retries, wait)
+            time.sleep(wait)
+    raise RuntimeError(
+        f"Todas as {max_retries} tentativas falharam para {url}. Último erro: {last_exc}"
+    )
 
-# ---------------------------------------------------------------------------
-# 2. AUTHENTICATION
-# ---------------------------------------------------------------------------
+# ═══════════════════════════════════════════════════════════════════════════════
+# 4. AUTENTICAÇÃO  (token único por execução)
+# ═══════════════════════════════════════════════════════════════════════════════
 
-def get_access_token():
-    client_id = os.environ["SH_CLIENT_ID"]
-    client_secret = os.environ["SH_CLIENT_SECRET"]
-    resp = requests.post(
+def get_access_token() -> str:
+    log.info("Obtendo token OAuth2 do Copernicus CDSE...")
+    resp = _http_post(
         SH_TOKEN_URL,
         data={
             "grant_type": "client_credentials",
-            "client_id": client_id,
-            "client_secret": client_secret,
+            "client_id":     os.environ["SH_CLIENT_ID"],
+            "client_secret": os.environ["SH_CLIENT_SECRET"],
         },
         timeout=30,
     )
     if not resp.ok:
-        raise RuntimeError(
-            f"Token endpoint returned {resp.status_code}: {resp.text}"
-        )
+        raise RuntimeError(f"Token endpoint: {resp.status_code} {resp.text}")
+    log.info("Token obtido com sucesso.")
     return resp.json()["access_token"]
 
-
-# ---------------------------------------------------------------------------
-# 2.5 GEOMETRY REPROJECTION (WGS84 -> UTM)
-# ---------------------------------------------------------------------------
-# The Sentinel Hub Statistical API interprets "resx"/"resy" in the SAME UNITS
-# as the request's CRS. ROI_GEOJSON above is in WGS84 (EPSG:4326), i.e.
-# degrees of latitude/longitude -- so "resx": 10 would mean a 10-DEGREE pixel
-# (larger than the whole state of Santa Catarina), not 10 meters, and the API
-# rejects the request. To get real 10 m pixels we reproject the polygon to
-# its local UTM zone (in meters) before building the request.
+# ═══════════════════════════════════════════════════════════════════════════════
+# 5. GEOMETRIA
+# ═══════════════════════════════════════════════════════════════════════════════
 
 def _iter_coords(coords):
-    """Recursively walk a GeoJSON coordinates structure, yielding
-    (ring, index, [lon, lat, ...]) tuples for every vertex, regardless of
-    nesting depth (Polygon vs MultiPolygon)."""
     if isinstance(coords[0], (int, float)):
         yield coords
     else:
         for item in coords:
             yield from _iter_coords(item)
 
-
-def reproject_to_utm(geometry):
-    """Reproject a GeoJSON Polygon/MultiPolygon geometry (in EPSG:4326) to
-    its local UTM zone. Returns (reprojected_geometry, epsg_code)."""
-    all_points = list(_iter_coords(geometry["coordinates"]))
-    lon_c = sum(p[0] for p in all_points) / len(all_points)
-    lat_c = sum(p[1] for p in all_points) / len(all_points)
-
+def reproject_to_utm(geometry: dict) -> tuple[dict, int]:
+    """Reprojeta geometria GeoJSON de EPSG:4326 para a zona UTM local."""
+    pts = list(_iter_coords(geometry["coordinates"]))
+    lon_c = sum(p[0] for p in pts) / len(pts)
+    lat_c = sum(p[1] for p in pts) / len(pts)
     zone = int((lon_c + 180) // 6) + 1
-    epsg = (32700 if lat_c < 0 else 32600) + zone  # UTM south/north zone
+    epsg = (32700 if lat_c < 0 else 32600) + zone
+    t = Transformer.from_crs("EPSG:4326", f"EPSG:{epsg}", always_xy=True)
 
-    transformer = Transformer.from_crs("EPSG:4326", f"EPSG:{epsg}", always_xy=True)
-
-    def _transform(coords):
+    def _tx(coords):
         if isinstance(coords[0], (int, float)):
-            x, y = transformer.transform(coords[0], coords[1])
+            x, y = t.transform(coords[0], coords[1])
             return [x, y]
-        return [_transform(c) for c in coords]
+        return [_tx(c) for c in coords]
 
-    reprojected = {
-        "type": geometry["type"],
-        "coordinates": _transform(geometry["coordinates"]),
-    }
-    return reprojected, epsg
+    return {"type": geometry["type"], "coordinates": _tx(geometry["coordinates"])}, epsg
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# 6. BUSCA DE MÉTRICAS  →  retorna TODAS as cenas válidas do período
+# ═══════════════════════════════════════════════════════════════════════════════
 
-# ---------------------------------------------------------------------------
-# 3. FETCH LATEST NDVI STATISTICS
-# ---------------------------------------------------------------------------
-
-def _stat_mean(item, output_id):
+def _stat(item, output_id):
     return item.get("outputs", {}).get(output_id, {}).get("bands", {}).get("B0", {}).get("stats")
 
+def _sanity(scene: dict):
+    for k in ("ndvi", "ndwi", "ndmi"):
+        v = scene.get(k)
+        if v is not None and not (-1.0 <= v <= 1.0):
+            log.warning("%s fora do intervalo físico: %.4f", k.upper(), v)
 
-def fetch_latest_metrics(token):
+def fetch_all_scenes(token: str) -> list[dict]:
+    """
+    Retorna lista de todas as cenas válidas dos últimos LOOKBACK_DAYS dias,
+    ordenadas por data. Cada item tem: date, ndvi, ndwi, ndmi, cloud_pct,
+    valid_fraction. A melhor cena (menor cloud_pct) tem flag best=True.
+    """
     today = dt.date.today()
     start = today - dt.timedelta(days=LOOKBACK_DAYS)
-    roi_geometry_wgs84 = ROI_GEOJSON["features"][0]["geometry"]
-    roi_geometry_utm, utm_epsg = reproject_to_utm(roi_geometry_wgs84)
+    roi_wgs84 = ROI_GEOJSON["features"][0]["geometry"]
+    roi_utm, epsg = reproject_to_utm(roi_wgs84)
 
+    log.info("Consultando API Estatística (%s → %s)...", start, today)
     payload = {
         "input": {
             "bounds": {
-                "geometry": roi_geometry_utm,
-                "properties": {"crs": f"http://www.opengis.net/def/crs/EPSG/0/{utm_epsg}"},
+                "geometry": roi_utm,
+                "properties": {"crs": f"http://www.opengis.net/def/crs/EPSG/0/{epsg}"},
             },
             "data": [{"type": "sentinel-2-l2a"}],
         },
         "aggregation": {
             "timeRange": {
                 "from": f"{start.isoformat()}T00:00:00Z",
-                "to": f"{today.isoformat()}T23:59:59Z",
+                "to":   f"{today.isoformat()}T23:59:59Z",
             },
             "aggregationInterval": {"of": "P1D"},
-            "resx": 10,
-            "resy": 10,
+            "resx": 10, "resy": 10,
             "evalscript": EVALSCRIPT_INDICES,
         },
         "calculations": {
@@ -339,65 +336,69 @@ def fetch_latest_metrics(token):
         },
     }
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    resp = requests.post(SH_STATS_URL, headers=headers, json=payload, timeout=90)
+    resp = _http_post(SH_STATS_URL, headers=headers, json=payload, timeout=90)
     if not resp.ok:
-        raise RuntimeError(f"Statistical API returned {resp.status_code}: {resp.text}")
-    data = resp.json()
+        raise RuntimeError(f"API Estatística: {resp.status_code} {resp.text}")
 
-    candidates = []
-    for item in data.get("data", []):
-        ndvi_stats = _stat_mean(item, "ndvi")
-        ndwi_stats = _stat_mean(item, "ndwi")
-        ndmi_stats = _stat_mean(item, "ndmi")
-        if not ndvi_stats or not ndwi_stats or not ndmi_stats:
+    scenes = []
+    for item in resp.json().get("data", []):
+        ns = _stat(item, "ndvi")
+        ws = _stat(item, "ndwi")
+        ms = _stat(item, "ndmi")
+        if not ns or not ws or not ms:
             continue
-        sample_count = ndvi_stats.get("sampleCount", 0)
-        if sample_count <= 0:
+        sc = ns.get("sampleCount", 0)
+        if sc <= 0:
             continue
-        valid_px = sample_count - ndvi_stats.get("noDataCount", 0)
-        valid_fraction = valid_px / max(GEOMETRY_PIXEL_COUNT, 1)
-        if valid_fraction < MIN_VALID_FRACTION:
+        valid_px = sc - ns.get("noDataCount", 0)
+        vf = valid_px / max(GEOMETRY_PIXEL_COUNT, 1)
+        if vf < MIN_VALID_FRACTION:
             continue
-        date_str = item["interval"]["from"][:10]
-        cloud_pct = max(0.0, min(100.0, (1.0 - valid_fraction) * 100.0))
-        candidates.append({
-            "date": date_str,
-            "ndvi": ndvi_stats.get("mean"),
-            "ndwi": ndwi_stats.get("mean"),
-            "ndmi": ndmi_stats.get("mean"),
-            "cloud_pct": cloud_pct,
-            "valid_fraction": valid_fraction,
-        })
+        date_str  = item["interval"]["from"][:10]
+        cloud_pct = max(0.0, min(100.0, (1.0 - vf) * 100.0))
+        scene = {
+            "date":           date_str,
+            "ndvi":           ns.get("mean"),
+            "ndwi":           ws.get("mean"),
+            "ndmi":           ms.get("mean"),
+            "cloud_pct":      round(cloud_pct, 1),
+            "valid_fraction": round(vf, 4),
+            "best":           False,
+        }
+        _sanity(scene)
+        scenes.append(scene)
+        log.debug("Cena %s  NDVI=%.3f  nuvens=%.1f%%  fração=%.2f",
+                  date_str, scene["ndvi"], cloud_pct, vf)
 
-    if not candidates:
-        return None
-    candidates.sort(key=lambda x: x["date"])
-    return candidates[-1]
+    if not scenes:
+        log.warning("Nenhuma cena válida nos últimos %d dias.", LOOKBACK_DAYS)
+        return []
 
+    scenes.sort(key=lambda x: x["date"])
+    # marca a melhor cena (menor cloud_pct; em empate, a mais recente)
+    best = min(scenes, key=lambda x: (x["cloud_pct"], -scenes.index(x)))
+    best["best"] = True
+    log.info("Melhor cena: %s (NDVI=%.3f, nuvens=%.1f%%)",
+             best["date"], best["ndvi"], best["cloud_pct"])
+    log.info("Total de cenas válidas no período: %d", len(scenes))
+    return scenes
 
-# ---------------------------------------------------------------------------
-# 3.5 IMAGE PANEL (true color + NDVI + NDWI, side by side)
-# ---------------------------------------------------------------------------
+# ═══════════════════════════════════════════════════════════════════════════════
+# 7. PAINEL DE IMAGEM
+# ═══════════════════════════════════════════════════════════════════════════════
 
-def _bbox_from_geometry(geometry_wgs84, pad_fraction=0.05):
-    """Return [min_lon, min_lat, max_lon, max_lat] for a GeoJSON geometry,
-    padded a little so the reservoir isn't flush against the image edge."""
-    points = list(_iter_coords(geometry_wgs84["coordinates"]))
-    lons = [p[0] for p in points]
-    lats = [p[1] for p in points]
-    min_lon, max_lon = min(lons), max(lons)
-    min_lat, max_lat = min(lats), max(lats)
-    pad_lon = (max_lon - min_lon) * pad_fraction
-    pad_lat = (max_lat - min_lat) * pad_fraction
-    return [min_lon - pad_lon, min_lat - pad_lat, max_lon + pad_lon, max_lat + pad_lat]
+def _bbox(geometry_wgs84: dict, pad: float = 0.05) -> list[float]:
+    pts   = list(_iter_coords(geometry_wgs84["coordinates"]))
+    lons  = [p[0] for p in pts]; lats = [p[1] for p in pts]
+    dlon  = (max(lons) - min(lons)) * pad; dlat = (max(lats) - min(lats)) * pad
+    return [min(lons)-dlon, min(lats)-dlat, max(lons)+dlon, max(lats)+dlat]
 
-
-def _fetch_process_image(token, evalscript, bbox_wgs84, date_str, width, height):
-    """Single Process API call -> raw PNG bytes for one evalscript/date."""
+def _fetch_png(token: str, evalscript: str, bbox: list, date_str: str,
+               w: int, h: int) -> bytes:
     payload = {
         "input": {
             "bounds": {
-                "bbox": bbox_wgs84,
+                "bbox": bbox,
                 "properties": {"crs": "http://www.opengis.net/def/crs/EPSG/0/4326"},
             },
             "data": [{
@@ -405,302 +406,419 @@ def _fetch_process_image(token, evalscript, bbox_wgs84, date_str, width, height)
                 "dataFilter": {
                     "timeRange": {
                         "from": f"{date_str}T00:00:00Z",
-                        "to": f"{date_str}T23:59:59Z",
+                        "to":   f"{date_str}T23:59:59Z",
                     },
                     "mosaickingOrder": "leastCC",
                 },
             }],
         },
         "output": {
-            "width": width,
-            "height": height,
+            "width": w, "height": h,
             "responses": [{"identifier": "default", "format": {"type": "image/png"}}],
         },
         "evalscript": evalscript,
     }
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    resp = requests.post(SH_PROCESS_URL, headers=headers, json=payload, timeout=60)
+    resp = _http_post(SH_PROCESS_URL, headers=headers, json=payload, timeout=60)
     if not resp.ok:
-        raise RuntimeError(f"Process API returned {resp.status_code}: {resp.text[:500]}")
-    return resp.content  # raw PNG bytes
+        raise RuntimeError(f"API de Processo: {resp.status_code} {resp.content[:300]}")
+    return resp.content
 
+def _load_font(size: int = 14):
+    from PIL import ImageFont
+    for path in [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/ttf-dejavu/DejaVuSans.ttf",
+    ]:
+        if Path(path).exists():
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                pass
+    return ImageFont.load_default()
 
-def fetch_image_panel(token, date_str, roi_geometry_wgs84):
-    """Build a single side-by-side PNG (true color | NDVI | NDWI) for the
-    given date and reservoir geometry. Returns PNG bytes, or None if image
-    rendering fails for any reason (an image is a nice-to-have -- a failure
-    here should never block the numeric alert itself)."""
-    from PIL import Image, ImageDraw, ImageFont
-    import io
-
+def build_panel(token: str, date_str: str, roi_wgs84: dict) -> bytes | None:
+    """
+    Gera PNG composto (cor real | NDVI | NDWI) para uma data.
+    Retorna bytes ou None se falhar (etapa não-bloqueante).
+    """
+    from PIL import Image, ImageDraw
     try:
-        bbox = _bbox_from_geometry(roi_geometry_wgs84)
-        lon_span = bbox[2] - bbox[0]
-        lat_span = bbox[3] - bbox[1]
-        # keep sub-images at a sensible aspect ratio instead of a fixed square
-        if lon_span >= lat_span:
-            width = PANEL_IMAGE_SIZE
-            height = max(64, int(PANEL_IMAGE_SIZE * lat_span / lon_span))
+        bb   = _bbox(roi_wgs84)
+        dlon = bb[2] - bb[0]; dlat = bb[3] - bb[1]
+        if dlon >= dlat:
+            w = PANEL_IMAGE_SIZE; h = max(64, int(PANEL_IMAGE_SIZE * dlat / dlon))
         else:
-            height = PANEL_IMAGE_SIZE
-            width = max(64, int(PANEL_IMAGE_SIZE * lon_span / lat_span))
+            h = PANEL_IMAGE_SIZE; w = max(64, int(PANEL_IMAGE_SIZE * dlon / dlat))
 
         specs = [
-            ("True color", EVALSCRIPT_TRUECOLOR),
-            ("NDVI", EVALSCRIPT_NDVI_VIZ),
-            ("NDWI", EVALSCRIPT_NDWI_VIZ),
+            ("Cor real", EVALSCRIPT_TRUECOLOR),
+            ("NDVI",     EVALSCRIPT_NDVI_VIZ),
+            ("NDWI",     EVALSCRIPT_NDWI_VIZ),
         ]
-
         tiles = []
         for label, script in specs:
-            png_bytes = _fetch_process_image(token, script, bbox, date_str, width, height)
-            tiles.append((label, Image.open(io.BytesIO(png_bytes)).convert("RGB")))
+            png = _fetch_png(token, script, bb, date_str, w, h)
+            tiles.append((label, Image.open(io.BytesIO(png)).convert("RGB")))
 
-        label_h = 28
-        gap = 6
-        panel_w = width * 3 + gap * 2
-        panel_h = height + label_h
-        panel = Image.new("RGB", (panel_w, panel_h), "white")
-        draw = ImageDraw.Draw(panel)
-        try:
-            font = ImageFont.load_default()
-        except Exception:
-            font = None
-
+        font_lg = _load_font(14)
+        font_sm = _load_font(11)
+        label_h = 26; gap = 6
+        panel   = Image.new("RGB", (w * 3 + gap * 2, h + label_h), (245, 245, 245))
+        draw    = ImageDraw.Draw(panel)
         x = 0
         for label, tile in tiles:
             panel.paste(tile, (x, label_h))
-            draw.text((x + 4, 6), f"{label} - {date_str}", fill="black", font=font)
-            x += width + gap
+            draw.rectangle([x, 0, x + w, label_h - 1], fill=(50, 50, 50))
+            draw.text((x + 6, 5),          label,    fill="white",          font=font_lg)
+            draw.text((x + 6, label_h-13), date_str, fill=(200, 200, 200),  font=font_sm)
+            x += w + gap
 
         buf = io.BytesIO()
-        panel.save(buf, format="PNG")
+        panel.save(buf, format="PNG", optimize=True)
+        log.info("Painel gerado para %s (%d bytes).", date_str, buf.tell())
         return buf.getvalue()
-
-    except Exception as exc:  # noqa: BLE001
-        print(f"[warn] Could not build image panel ({exc}); continuing without it.")
+    except Exception as exc:
+        log.warning("Não foi possível gerar painel para %s: %s", date_str, exc)
         return None
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# 8. DETECÇÃO DE ANOMALIA
+# ═══════════════════════════════════════════════════════════════════════════════
 
+def check_anomaly(date_str: str, ndvi: float) -> tuple[float, bool]:
+    month = int(date_str.split("-")[1])
+    c     = MONTHLY_CLIMATOLOGY[month]
+    z     = (ndvi - c["mean"]) / c["sd"]
+    log.info("Z-score para %s (mês %02d): %.3f  (NDVI=%.3f μ=%.3f σ=%.3f)",
+             date_str, month, z, ndvi, c["mean"], c["sd"])
+    return z, z >= ALERT_Z_THRESHOLD
 
-# ---------------------------------------------------------------------------
-# 3.8 PERSIST RESULTS FOR THE PUBLIC DASHBOARD
-# ---------------------------------------------------------------------------
-
-PROJECT_ROOT = os.path.dirname(__file__)
-DOCS_DIR = os.path.join(PROJECT_ROOT, "docs")
-DATA_DIR = os.path.join(DOCS_DIR, "data")
-LATEST_IMAGE_DIR = os.path.join(DOCS_DIR, "images", "latest")
-ARCHIVE_IMAGE_DIR = os.path.join(DOCS_DIR, "images", "archive")
-HISTORY_CSV = os.path.join(DATA_DIR, "historico.csv")
-LATEST_JSON = os.path.join(DATA_DIR, "ultimo.json")
-
-
-def _status_from_z(z):
-    # Only the HIGH-NDVI direction matters for this system: an unusually
-    # LOW NDVI just means the reservoir is clearer than typical for the
-    # month, which is not a macrophyte-bloom signal and should not alert.
-    if z >= ALERT_Z_THRESHOLD:
-        return "ALERTA"
-    if z >= 1.5:
-        return "ATENÇÃO"
+def _status(z: float) -> str:
+    # Apenas a direção POSITIVA importa (macrófitas elevam o NDVI)
+    if z >= ALERT_Z_THRESHOLD: return "ALERTA"
+    if z >= ATTENTION_Z:       return "ATENÇÃO"
     return "NORMAL"
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# 9. PERSISTÊNCIA
+# ═══════════════════════════════════════════════════════════════════════════════
 
-def save_dashboard_data(result, z):
-    os.makedirs(DATA_DIR, exist_ok=True)
-    os.makedirs(LATEST_IMAGE_DIR, exist_ok=True)
-    os.makedirs(ARCHIVE_IMAGE_DIR, exist_ok=True)
-    status = _status_from_z(z)
+PROJECT_ROOT     = Path(__file__).parent
+DATA_DIR         = PROJECT_ROOT / "docs" / "data"
+LATEST_IMG_DIR   = PROJECT_ROOT / "docs" / "images" / "latest"
+ARCHIVE_IMG_DIR  = PROJECT_ROOT / "docs" / "images" / "archive"
+HISTORY_CSV      = DATA_DIR / "historico.csv"
+LATEST_JSON      = DATA_DIR / "ultimo.json"
+SCENES_30D_JSON  = DATA_DIR / "passagens_30d.json"
+
+CSV_FIELDS = ["date", "ndvi", "ndwi", "ndmi", "cloud_pct",
+              "valid_fraction", "zscore", "status"]
+
+def save_panel_bytes(panel_bytes: bytes | None, date_str: str,
+                     is_best: bool = False) -> None:
+    if not panel_bytes:
+        return
+    archive = ARCHIVE_IMG_DIR / date_str
+    archive.mkdir(parents=True, exist_ok=True)
+    (archive / "panel.png").write_bytes(panel_bytes)
+    if is_best:
+        LATEST_IMG_DIR.mkdir(parents=True, exist_ok=True)
+        (LATEST_IMG_DIR / "panel.png").write_bytes(panel_bytes)
+        log.info("Painel da melhor cena copiado para latest/.")
+
+def save_all(scenes: list[dict], best: dict, z: float, run_id: str) -> dict:
+    """
+    Persiste todos os arquivos de dados e imagens.
+    Retorna o payload do ultimo.json.
+    """
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    LATEST_IMG_DIR.mkdir(parents=True, exist_ok=True)
+    ARCHIVE_IMG_DIR.mkdir(parents=True, exist_ok=True)
+
+    status = _status(z)
+
+    # ── ultimo.json (estado mais recente — melhor cena) ─────────────────────
     payload = {
-        "updated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
-        "date": result["date"],
-        "ndvi": result["ndvi"],
-        "ndwi": result["ndwi"],
-        "ndmi": result["ndmi"],
-        "cloud_pct": result["cloud_pct"],
-        "valid_fraction": result["valid_fraction"],
-        "zscore": z,
-        "status": status,
+        "schema_version": SCHEMA_VERSION,
+        "run_id":         run_id,
+        "updated_at":     dt.datetime.now(dt.timezone.utc).isoformat(),
+        "date":           best["date"],
+        "ndvi":           best["ndvi"],
+        "ndwi":           best["ndwi"],
+        "ndmi":           best["ndmi"],
+        "cloud_pct":      best["cloud_pct"],
+        "valid_fraction": best["valid_fraction"],
+        "zscore":         round(z, 4),
+        "status":         status,
         "cloud_threshold": CLOUD_THRESHOLD,
-        "cloud_note": "Cobertura estimada pela máscara SCL na área de estudo; 10% é apenas referência e não bloqueia o envio.",
+        "cloud_note": (
+            "Cobertura estimada pela máscara SCL na área de estudo; "
+            "10% é apenas referência e não bloqueia o envio."
+        ),
     }
-    with open(LATEST_JSON, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
+    LATEST_JSON.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    log.info("ultimo.json atualizado (status=%s, run_id=%s).", status, run_id)
 
-    import csv
-    fields = ["date", "ndvi", "ndwi", "ndmi", "cloud_pct", "valid_fraction", "zscore", "status"]
-    existing = []
-    if os.path.exists(HISTORY_CSV):
-        with open(HISTORY_CSV, "r", encoding="utf-8", newline="") as f:
-            existing = list(csv.DictReader(f))
-    row = {k: payload[k] for k in fields}
-    by_date = {r.get("date"): r for r in existing}
-    by_date[result["date"]] = row
+    # ── historico.csv (série acumulada — upsert por data) ───────────────────
+    existing: dict[str, dict] = {}
+    if HISTORY_CSV.exists():
+        with open(HISTORY_CSV, encoding="utf-8", newline="") as f:
+            for row in csv.DictReader(f):
+                existing[row["date"]] = row
+    existing[best["date"]] = {k: payload.get(k, "") for k in CSV_FIELDS}
     with open(HISTORY_CSV, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fields)
-        writer.writeheader()
-        for date_key in sorted(by_date):
-            writer.writerow(by_date[date_key])
+        w = csv.DictWriter(f, fieldnames=CSV_FIELDS)
+        w.writeheader()
+        for key in sorted(existing):
+            w.writerow(existing[key])
+    log.info("historico.csv atualizado (%d registros).", len(existing))
+
+    # ── passagens_30d.json (todas as cenas do período + z-score) ────────────
+    # Enriquece cada cena com z-score e status antes de salvar
+    enriched = []
+    for sc in scenes:
+        sz, _ = check_anomaly(sc["date"], sc["ndvi"])
+        enriched.append({
+            **sc,
+            "zscore": round(sz, 4),
+            "status": _status(sz),
+            # informa ao painel se a imagem de arquivo já existe
+            "has_image": (ARCHIVE_IMG_DIR / sc["date"] / "panel.png").exists(),
+        })
+    scenes_payload = {
+        "schema_version": SCHEMA_VERSION,
+        "run_id":         run_id,
+        "updated_at":     payload["updated_at"],
+        "lookback_days":  LOOKBACK_DAYS,
+        "scenes":         enriched,
+    }
+    SCENES_30D_JSON.write_text(
+        json.dumps(scenes_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    log.info("passagens_30d.json atualizado (%d cenas).", len(enriched))
 
     return payload
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# 10. NOTIFICAÇÕES
+# ═══════════════════════════════════════════════════════════════════════════════
 
-def save_panel(panel_bytes, date_str):
-    if not panel_bytes:
-        return None
-    latest_path = os.path.join(LATEST_IMAGE_DIR, "panel.png")
-    archive_dir = os.path.join(ARCHIVE_IMAGE_DIR, date_str)
-    os.makedirs(archive_dir, exist_ok=True)
-    archive_path = os.path.join(archive_dir, "panel.png")
-    with open(latest_path, "wb") as f:
-        f.write(panel_bytes)
-    with open(archive_path, "wb") as f:
-        f.write(panel_bytes)
-    return latest_path
+# ── Telegram ─────────────────────────────────────────────────────────────────
 
-# ---------------------------------------------------------------------------
-# 4. ANOMALY CHECK
-# ---------------------------------------------------------------------------
+def send_telegram(message: str, image_bytes: bytes | None = None):
+    token    = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_raw = os.environ.get("TELEGRAM_CHAT_ID")
+    if not token or not chat_raw:
+        log.info("Telegram não configurado; pulando.")
+        return
+    for chat_id in [c.strip() for c in chat_raw.split(",") if c.strip()]:
+        try:
+            if image_bytes:
+                caption = message[:1021] + "..." if len(message) > 1024 else message
+                resp = _http_post(
+                    f"https://api.telegram.org/bot{token}/sendPhoto",
+                    data={"chat_id": chat_id, "caption": caption},
+                    files={"photo": ("panel.png", image_bytes, "image/png")},
+                    timeout=60,
+                )
+            else:
+                resp = _http_post(
+                    f"https://api.telegram.org/bot{token}/sendMessage",
+                    data={"chat_id": chat_id, "text": message},
+                    timeout=30,
+                )
+            if resp.ok:
+                log.info("Telegram enviado para %s.", chat_id)
+            else:
+                log.error("Telegram falhou para %s: %s", chat_id, resp.text)
+        except Exception as exc:
+            log.error("Erro Telegram %s: %s", chat_id, exc)
 
-def check_anomaly(date_str, ndvi_value):
-    month = int(date_str.split("-")[1])
-    clim = MONTHLY_CLIMATOLOGY[month]
-    if clim["mean"] is None or clim["sd"] is None:
-        raise RuntimeError(
-            f"MONTHLY_CLIMATOLOGY for month {month} is not filled in. "
-            "Copy the values from your Monthly_Climatology results sheet."
+# ── WhatsApp via CallMeBot (gratuito, sem servidor) ──────────────────────────
+# Siga https://www.callmebot.com/blog/free-api-whatsapp-messages/ para
+# obter sua APIKEY. Defina os secrets WHATSAPP_PHONE e WHATSAPP_APIKEY.
+# Apenas texto — imagem chega pelo Telegram/e-mail.
+
+def send_whatsapp(message: str):
+    phone  = os.environ.get("WHATSAPP_PHONE")
+    apikey = os.environ.get("WHATSAPP_APIKEY")
+    if not phone or not apikey:
+        log.info("WhatsApp não configurado; pulando.")
+        return
+    try:
+        resp = requests.get(
+            "https://api.callmebot.com/whatsapp.php",
+            params={"phone": phone, "text": message, "apikey": apikey},
+            timeout=30,
         )
-    z = (ndvi_value - clim["mean"]) / clim["sd"]
-    return z, z >= ALERT_Z_THRESHOLD
+        if resp.ok:
+            log.info("WhatsApp enviado para %s.", phone)
+        else:
+            log.error("WhatsApp falhou: %d %s", resp.status_code, resp.text[:200])
+    except Exception as exc:
+        log.error("Erro WhatsApp: %s", exc)
 
+# ── E-mail (Gmail / Outlook / SMTP genérico) ─────────────────────────────────
+# Gmail:   EMAIL_SMTP_HOST=smtp.gmail.com  EMAIL_SMTP_PORT=465   (SSL)
+# Outlook: EMAIL_SMTP_HOST=smtp.office365.com  EMAIL_SMTP_PORT=587  (STARTTLS)
+# Se EMAIL_SMTP_HOST não estiver definido, usa Gmail como padrão.
 
-# ---------------------------------------------------------------------------
-# 5. ALERTS
-# ---------------------------------------------------------------------------
-
-def send_telegram(message, image_bytes=None):
-    token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    chat_ids_raw = os.environ.get("TELEGRAM_CHAT_ID")
-    if not token or not chat_ids_raw:
-        print("Telegram not configured, skipping.")
+def send_email(subject: str, message: str, image_bytes: bytes | None = None):
+    addr     = os.environ.get("EMAIL_ADDRESS")
+    password = os.environ.get("EMAIL_APP_PASSWORD")
+    to_raw   = os.environ.get("ALERT_EMAIL_TO")
+    if not addr or not password or not to_raw:
+        log.info("E-mail não configurado; pulando.")
         return
-    # TELEGRAM_CHAT_ID can be a single id ("123456789") or a comma-separated
-    # list ("123456789,987654321") to notify multiple people/chats. Each
-    # person must have started a chat with the bot at least once -- Telegram
-    # doesn't allow bots to message someone who hasn't done that first.
-    chat_ids = [c.strip() for c in chat_ids_raw.split(",") if c.strip()]
+    smtp_host = os.environ.get("EMAIL_SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.environ.get("EMAIL_SMTP_PORT", "465"))
+    to_addrs  = [a.strip() for a in to_raw.split(",") if a.strip()]
 
     if image_bytes:
-        url = f"https://api.telegram.org/bot{token}/sendPhoto"
-        # Telegram caption max length is 1024 chars; the message is short
-        # enough here, but truncate defensively so the send never fails
-        # solely because of caption length.
-        caption = message if len(message) <= 1024 else message[:1021] + "..."
-        for chat_id in chat_ids:
-            files = {"photo": ("panel.png", image_bytes, "image/png")}
-            resp = requests.post(
-                url, data={"chat_id": chat_id, "caption": caption}, files=files, timeout=60
-            )
-            if not resp.ok:
-                print(f"Telegram photo send to {chat_id} failed: {resp.status_code} {resp.text}")
-    else:
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        for chat_id in chat_ids:
-            resp = requests.post(url, data={"chat_id": chat_id, "text": message}, timeout=30)
-            if not resp.ok:
-                print(f"Telegram send to {chat_id} failed: {resp.status_code} {resp.text}")
-
-
-def send_email(subject, message, image_bytes=None):
-    addr = os.environ.get("EMAIL_ADDRESS")
-    app_password = os.environ.get("EMAIL_APP_PASSWORD")
-    to_raw = os.environ.get("ALERT_EMAIL_TO")
-    if not addr or not app_password or not to_raw:
-        print("Email not configured, skipping.")
-        return
-    # ALERT_EMAIL_TO can be a single address or a comma-separated list, e.g.
-    # "alice@example.com, bob@example.com"
-    to_addrs = [a.strip() for a in to_raw.split(",") if a.strip()]
-
-    if image_bytes:
-        from email.mime.multipart import MIMEMultipart
-        from email.mime.image import MIMEImage
         msg = MIMEMultipart()
         msg["Subject"] = subject
-        msg["From"] = addr
-        msg["To"] = ", ".join(to_addrs)
+        msg["From"]    = addr
+        msg["To"]      = ", ".join(to_addrs)
         msg.attach(MIMEText(message))
         img = MIMEImage(image_bytes, _subtype="png")
-        img.add_header("Content-Disposition", "attachment", filename="reservoir_panel.png")
+        img.add_header("Content-Disposition", "attachment",
+                       filename="reservatorio_panel.png")
         msg.attach(img)
     else:
         msg = MIMEText(message)
         msg["Subject"] = subject
-        msg["From"] = addr
-        msg["To"] = ", ".join(to_addrs)
+        msg["From"]    = addr
+        msg["To"]      = ", ".join(to_addrs)
 
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-        server.login(addr, app_password)
-        server.sendmail(addr, to_addrs, msg.as_string())
+    try:
+        if smtp_port == 587:
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as srv:
+                srv.starttls(); srv.login(addr, password)
+                srv.sendmail(addr, to_addrs, msg.as_string())
+        else:
+            with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30) as srv:
+                srv.login(addr, password)
+                srv.sendmail(addr, to_addrs, msg.as_string())
+        log.info("E-mail enviado para: %s", ", ".join(to_addrs))
+    except Exception as exc:
+        log.error("Erro e-mail: %s", exc)
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# 11. SMOKE TEST
+# ═══════════════════════════════════════════════════════════════════════════════
 
-# ---------------------------------------------------------------------------
-# 6. MAIN
-# ---------------------------------------------------------------------------
+def smoke_test():
+    """Falha rápido com mensagem clara se secrets obrigatórios estiverem ausentes."""
+    missing = [k for k in ("SH_CLIENT_ID", "SH_CLIENT_SECRET")
+               if not os.environ.get(k)]
+    if missing:
+        raise EnvironmentError(
+            f"Secrets obrigatórios não configurados: {', '.join(missing)}. "
+            "Configure em Settings > Secrets and variables > Actions no GitHub."
+        )
+    has_notif = any([
+        os.environ.get("TELEGRAM_BOT_TOKEN") and os.environ.get("TELEGRAM_CHAT_ID"),
+        os.environ.get("EMAIL_ADDRESS") and os.environ.get("EMAIL_APP_PASSWORD")
+            and os.environ.get("ALERT_EMAIL_TO"),
+        os.environ.get("WHATSAPP_PHONE") and os.environ.get("WHATSAPP_APIKEY"),
+    ])
+    if not has_notif:
+        raise EnvironmentError(
+            "Nenhum canal de notificação configurado. "
+            "Configure pelo menos Telegram, e-mail ou WhatsApp nos secrets."
+        )
+    active = [
+        name for name, cond in [
+            ("Telegram",  os.environ.get("TELEGRAM_BOT_TOKEN")),
+            ("E-mail",    os.environ.get("EMAIL_ADDRESS")),
+            ("WhatsApp",  os.environ.get("WHATSAPP_PHONE")),
+        ] if cond
+    ]
+    log.info("Smoke test OK. Canais ativos: %s", ", ".join(active))
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 12. MAIN
+# ═══════════════════════════════════════════════════════════════════════════════
 
 def main():
-    token = get_access_token()
-    result = fetch_latest_metrics(token)
+    run_id = str(uuid.uuid4())
+    log.info("=== Iniciando execução  run_id=%s ===", run_id)
 
-    if result is None:
-        message = (
-            f"[Sao Lourenco Reservoir] Nenhuma imagem Sentinel-2 com pixels válidos "
+    smoke_test()
+
+    token  = get_access_token()
+    scenes = fetch_all_scenes(token)
+
+    if not scenes:
+        msg = (
+            f"[São Lourenço] Nenhuma imagem Sentinel-2 com pixels válidos "
             f"foi encontrada nos últimos {LOOKBACK_DAYS} dias."
         )
-        print(message)
-        send_telegram(message)
-        send_email("Monitoramento São Lourenço - sem imagem", message)
+        log.warning(msg)
+        send_telegram(msg); send_email("Monitoramento São Lourenço – sem imagem", msg)
+        send_whatsapp(msg)
         return
 
-    z, is_alert = check_anomaly(result["date"], result["ndvi"])
-    payload = save_dashboard_data(result, z)
-    status = payload["status"]
+    best        = next(s for s in scenes if s["best"])
+    z, is_alert = check_anomaly(best["date"], best["ndvi"])
+    roi_wgs84   = ROI_GEOJSON["features"][0]["geometry"]
 
+    # Gera painel para a melhor cena (sempre)
+    best_panel = build_panel(token, best["date"], roi_wgs84)
+    save_panel_bytes(best_panel, best["date"], is_best=True)
+
+    # Gera painéis para cenas adicionais ainda sem imagem no arquivo
+    for sc in scenes:
+        if sc["best"]:
+            continue
+        archive_path = ARCHIVE_IMG_DIR / sc["date"] / "panel.png"
+        if not archive_path.exists():
+            log.info("Gerando imagem de arquivo para %s...", sc["date"])
+            panel = build_panel(token, sc["date"], roi_wgs84)
+            save_panel_bytes(panel, sc["date"], is_best=False)
+
+    # Persiste todos os dados (atualiza has_image depois de gerar imagens)
+    payload = save_all(scenes, best, z, run_id)
+    status  = payload["status"]
+
+    emoji = {"ALERTA": "🚨", "ATENÇÃO": "⚠️", "NORMAL": "✅"}.get(status, "ℹ️")
+    n_cenas = len(scenes)
     message = (
-        "🛰️ Monitoramento São Lourenço\n"
-        f"📅 Data da imagem: {result['date']}\n"
-        f"🌿 NDVI: {result['ndvi']:.3f}\n"
-        f"💧 NDWI: {result['ndwi']:.3f}\n"
-        f"🌱 NDMI: {result['ndmi']:.3f}\n"
-        f"☁️ Nuvens: {result['cloud_pct']:.1f}%\n"
+        f"🛰️ Monitoramento São Lourenço\n"
+        f"📅 Melhor cena: {best['date']}\n"
+        f"🌿 NDVI:    {best['ndvi']:.3f}\n"
+        f"💧 NDWI:    {best['ndwi']:.3f}\n"
+        f"🌱 NDMI:    {best['ndmi']:.3f}\n"
+        f"☁️ Nuvens:  {best['cloud_pct']:.1f}%\n"
         f"📊 Z-score: {z:.2f}\n"
-        f"Status: {status}\n"
+        f"{emoji} Status: {status}\n"
+        f"🔍 Passagens no período: {n_cenas} "
+        f"(veja todas em saolourenco.netlify.app)\n"
     )
-    if result["cloud_pct"] > CLOUD_THRESHOLD:
-        message += "☁️ Observação: cobertura acima de 10%; a imagem foi mantida no monitoramento e não foi descartada.\n"
+    if best["cloud_pct"] > CLOUD_THRESHOLD:
+        message += "☁️ Obs: cobertura > 10%; imagem mantida no histórico.\n"
     if is_alert:
-        message += "⚠️ Anomalia estatística detectada; recomenda-se verificação de campo.\n"
+        message += "⚠️ Anomalia estatística detectada — recomenda-se verificação de campo.\n"
 
-    print(message)
-    roi_geometry_wgs84 = ROI_GEOJSON["features"][0]["geometry"]
-    panel_bytes = fetch_image_panel(token, result["date"], roi_geometry_wgs84)
-    save_panel(panel_bytes, result["date"])
+    log.info("Mensagem composta:\n%s", message)
+    send_telegram(message, image_bytes=best_panel)
+    send_email(f"Monitoramento São Lourenço – {status}", message, image_bytes=best_panel)
+    send_whatsapp(message)
 
-    send_telegram(message, image_bytes=panel_bytes)
-    send_email(f"Monitoramento São Lourenço - {status}", message, image_bytes=panel_bytes)
+    log.info("=== Execução concluída  run_id=%s  status=%s ===", run_id, status)
 
 
 if __name__ == "__main__":
     try:
         main()
-    except Exception as exc:  # noqa: BLE001
-        # Make failures visible in the GitHub Actions log and, optionally,
-        # notify by Telegram so silent failures don't go unnoticed.
-        err_msg = f"NDVI monitor run failed: {exc}"
-        print(err_msg, file=sys.stderr)
+    except Exception as exc:
+        log.exception("Falha crítica na execução do monitor: %s", exc)
         try:
-            send_telegram(f"[ERROR] {err_msg}")
+            send_telegram(f"[ERRO CRÍTICO] Monitor São Lourenço falhou: {exc}")
         except Exception:
             pass
         sys.exit(1)
