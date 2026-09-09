@@ -1,12 +1,14 @@
 {
-  "updated_at": "2026-09-07T09:08:45.402061+00:00",
+  "schema_version": "3.0",
+  "run_id": "023a18a8-722b-4c6c-9607-292b927d1da0",
+  "updated_at": "2026-09-09T22:52:15.174464+00:00",
   "date": "2026-08-28",
   "ndvi": 0.10408534604039889,
   "ndwi": 0.0098686547104204,
   "ndmi": 0.05132222662512494,
-  "cloud_pct": 31.400525054217553,
-  "valid_fraction": 0.6859947494578245,
-  "zscore": 0.7087737159475043,
+  "cloud_pct": 31.4,
+  "valid_fraction": 0.686,
+  "zscore": 0.7088,
   "status": "NORMAL",
   "cloud_threshold": 10,
   "cloud_note": "Cobertura estimada pela máscara SCL na área de estudo; 10% é apenas referência e não bloqueia o envio."
