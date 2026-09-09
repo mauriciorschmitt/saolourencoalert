@@ -165,6 +165,42 @@ a{color:var(--accent)}
   .hero-live{display:none}
   .metrics{grid-template-columns:1fr 1fr}
 }
+/* ── seletor de passagens ────────────────────────────────────────────────── */
+.scene-selector{margin-bottom:14px}
+.scene-selector-label{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em}
+.scene-chips{display:flex;gap:6px;flex-wrap:wrap}
+.scene-chip{
+  display:flex;flex-direction:column;align-items:center;
+  border:1px solid var(--line);border-radius:10px;
+  padding:7px 10px;cursor:pointer;background:#fff;
+  font-family:inherit;transition:border-color .15s,background .15s;
+  min-width:72px;position:relative;
+}
+.scene-chip:hover{border-color:var(--accent-mid);background:var(--accent-light)}
+.scene-chip.active{border-color:var(--accent);background:var(--accent-light)}
+.scene-chip.best-chip::after{
+  content:"melhor";position:absolute;top:-8px;left:50%;transform:translateX(-50%);
+  background:var(--ok);color:#fff;font-size:10px;font-weight:700;
+  padding:1px 7px;border-radius:999px;white-space:nowrap;
+}
+.chip-date{font-size:12px;font-weight:600;color:var(--text)}
+.chip-cloud{font-size:11px;color:var(--muted);margin-top:2px}
+.chip-status{font-size:10px;font-weight:600;margin-top:3px;border-radius:999px;padding:1px 7px}
+.chip-ok{background:var(--ok-bg);color:var(--ok)}
+.chip-warn{background:var(--warn-bg);color:var(--warn)}
+.chip-alert{background:var(--alert-bg);color:var(--alert)}
+.chip-cloudy{background:#f0f0f0;color:#888}
+.scene-panel-header{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line);
+}
+.scene-panel-date{font-size:15px;font-weight:700;color:var(--text)}
+.scene-panel-meta{display:flex;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.scene-no-img{
+  background:var(--bg);border:1px dashed var(--line);border-radius:10px;
+  padding:28px;text-align:center;font-size:13px;color:var(--muted);
+}
+.scene-no-img a{color:var(--accent)}
 </style>
 </head>
 <body>
@@ -259,7 +295,7 @@ a{color:var(--accent)}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 // ── utilitários ──────────────────────────────────────────────────────────────
-let latest = null, historyData = [], chart = null;
+let latest = null, historyData = [], scenes30d = [], chart = null;
 const fmt = (v, d = 3) =>
   Number.isFinite(Number(v)) ? Number(v).toFixed(d).replace('.', ',') : '—';
 const esc = s => String(s)
@@ -284,12 +320,15 @@ function cloudClass(pct) {
 // ── carregamento de dados ────────────────────────────────────────────────────
 async function load() {
   try {
-    const [latestRaw, csvRaw] = await Promise.all([
-      fetch('data/ultimo.json?' + Date.now()).then(r => r.json()),
-      fetch('data/historico.csv?' + Date.now()).then(r => r.text()),
+    const ts = Date.now();
+    const [latestRaw, csvRaw, scenes30Raw] = await Promise.all([
+      fetch('data/ultimo.json?' + ts).then(r => r.json()),
+      fetch('data/historico.csv?' + ts).then(r => r.text()),
+      fetch('data/passagens_30d.json?' + ts).then(r => r.json()).catch(() => null),
     ]);
-    latest = latestRaw;
+    latest      = latestRaw;
     historyData = parseCSV(csvRaw);
+    scenes30d   = scenes30Raw ? scenes30Raw.scenes || [] : [];
     render();
   } catch (e) {
     document.getElementById('app').innerHTML =
@@ -377,12 +416,11 @@ function render() {
       </div>
     </div>
 
-    <!-- imagem -->
-    <section class="section card">
-      <div class="card-title">🛰️ Imagem mais recente — ${esc(latest.date || '—')}</div>
-      <div class="panel-wrap">
-        <img src="images/latest/panel.png?${Date.now()}" alt="Painel com cor real, NDVI e NDWI do reservatório">
-      </div>
+    <!-- imagem + seletor de passagens -->
+    <section class="section card" id="sec-imagem">
+      <div class="card-title">🛰️ Imagens do período — últimos 30 dias</div>
+      <div id="scene-selector-wrap"></div>
+      <div id="panel-display"></div>
       <div class="panel-labels">
         <div class="panel-label">
           <strong>Cor real (RGB)</strong>
@@ -428,6 +466,7 @@ function render() {
     };
   });
   drawMap();
+  renderSceneSelector();
 }
 
 // ── gráfico ──────────────────────────────────────────────────────────────────
@@ -566,6 +605,130 @@ document.addEventListener('submit', async e => {
     btn.disabled = false;
   }
 });
+
+// ── seletor de passagens dos últimos 30 dias ─────────────────────────────────
+function renderSceneSelector() {
+  const wrap = document.getElementById('scene-selector-wrap');
+  const display = document.getElementById('panel-display');
+  if (!wrap || !display) return;
+
+  // Se não há dados de passagens, exibe só a imagem mais recente normalmente
+  if (!scenes30d || scenes30d.length === 0) {
+    wrap.innerHTML = '';
+    display.innerHTML = `
+      <img src="images/latest/panel.png?${Date.now()}"
+           alt="Painel cor real, NDVI e NDWI"
+           style="width:100%;border-radius:10px;border:1px solid var(--line)">`;
+    return;
+  }
+
+  // Ordena: mais recente primeiro
+  const sorted = [...scenes30d].sort((a, b) => b.date.localeCompare(a.date));
+  const bestDate = (sorted.find(s => s.best) || sorted[0]).date;
+
+  function chipStatusClass(sc) {
+    if (Number(sc.cloud_pct) > 80) return 'chip-cloudy';
+    if (sc.status === 'ALERTA')    return 'chip-alert';
+    if (sc.status === 'ATENÇÃO')   return 'chip-warn';
+    return 'chip-ok';
+  }
+  function chipStatusLabel(sc) {
+    if (Number(sc.cloud_pct) > 80) return 'nublado';
+    if (sc.status === 'ALERTA')    return 'ALERTA';
+    if (sc.status === 'ATENÇÃO')   return 'ATENÇÃO';
+    return 'normal';
+  }
+
+  // Monta chips
+  const chipsHtml = sorted.map(sc => {
+    const isBest = sc.date === bestDate;
+    const cloudPct = Number(sc.cloud_pct).toFixed(0);
+    return `
+      <button class="scene-chip${isBest ? ' best-chip' : ''}"
+              data-date="${esc(sc.date)}"
+              data-has-image="${sc.has_image ? '1' : '0'}"
+              data-ndvi="${esc(fmt(sc.ndvi))}"
+              data-ndwi="${esc(fmt(sc.ndwi))}"
+              data-ndmi="${esc(fmt(sc.ndmi))}"
+              data-cloud="${esc(cloudPct)}"
+              data-z="${esc(fmt(sc.zscore, 2))}"
+              data-status="${esc(sc.status)}"
+              aria-label="Selecionar cena de ${esc(sc.date)}">
+        <span class="chip-date">${esc(sc.date)}</span>
+        <span class="chip-cloud">☁️ ${cloudPct}%</span>
+        <span class="chip-status ${chipStatusClass(sc)}">${chipStatusLabel(sc)}</span>
+      </button>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <div class="scene-selector">
+      <div class="scene-selector-label">Passagens disponíveis — selecione para visualizar</div>
+      <div class="scene-chips">${chipsHtml}</div>
+    </div>`;
+
+  // Seleciona a melhor cena por padrão
+  const defaultChip = wrap.querySelector(`[data-date="${bestDate}"]`) || wrap.querySelector('.scene-chip');
+  if (defaultChip) selectScene(defaultChip, display);
+
+  // Eventos de clique nos chips
+  wrap.querySelectorAll('.scene-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      wrap.querySelectorAll('.scene-chip').forEach(c => c.classList.remove('active'));
+      selectScene(chip, display);
+    });
+  });
+}
+
+function selectScene(chip, display) {
+  chip.classList.add('active');
+  const date     = chip.dataset.date;
+  const hasImage = chip.dataset.hasImage === '1';
+  const cloud    = chip.dataset.cloud;
+  const ndvi     = chip.dataset.ndvi;
+  const ndwi     = chip.dataset.ndwi;
+  const ndmi     = chip.dataset.ndmi;
+  const z        = chip.dataset.z;
+  const status   = chip.dataset.status;
+
+  // Pill de status
+  const sc = Number(cloud) > 80 ? 'cloudy'
+    : status === 'ALERTA'  ? 'alert'
+    : status === 'ATENÇÃO' ? 'warn' : 'ok';
+  const pillLabels = { ok:'NORMAL', warn:'ATENÇÃO', alert:'ALERTA', cloudy:'muito nublado' };
+  const pillClasses = { ok:'chip-ok', warn:'chip-warn', alert:'chip-alert', cloudy:'chip-cloudy' };
+
+  // Imagem: usa archive/{date}/panel.png se existir, senão latest se for a melhor
+  const isBest    = chip.classList.contains('best-chip');
+  const imgSrc    = hasImage
+    ? `images/archive/${date}/panel.png?${Date.now()}`
+    : isBest
+      ? `images/latest/panel.png?${Date.now()}`
+      : null;
+
+  const imgHtml = imgSrc
+    ? `<img src="${imgSrc}" alt="Painel Sentinel-2 — ${esc(date)}"
+            style="width:100%;border-radius:10px;border:1px solid var(--line);display:block"
+            onerror="this.outerHTML='<div class=scene-no-img>Imagem não disponível para esta data.<br>O painel é gerado na execução semanal.</div>'">`
+    : `<div class="scene-no-img">
+         Imagem ainda não gerada para esta data.<br>
+         Será criada automaticamente na próxima execução do monitoramento.<br>
+         <a href="images/latest/panel.png" target="_blank">Ver imagem da cena mais recente ↗</a>
+       </div>`;
+
+  display.innerHTML = `
+    <div class="scene-panel-header">
+      <span class="scene-panel-date">📅 ${esc(date)}</span>
+      <span class="chip-status ${pillClasses[sc]}" style="font-size:12px;padding:3px 10px;border-radius:999px">${pillLabels[sc]}</span>
+      <div class="scene-panel-meta">
+        <span>NDVI <b>${ndvi}</b></span>
+        <span>NDWI <b>${ndwi}</b></span>
+        <span>NDMI <b>${ndmi}</b></span>
+        <span>Z-score <b>${z}</b></span>
+        <span class="cloud-chip ${Number(cloud) >= 50 ? 'cloud-alert' : Number(cloud) >= 20 ? 'cloud-warn' : 'cloud-ok'}" style="font-size:12px">☁️ ${cloud}%</span>
+      </div>
+    </div>
+    ${imgHtml}`;
+}
 
 load();
 </script>
