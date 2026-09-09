@@ -2,7 +2,7 @@ name: Monitoramento Ambiental São Lourenço
 
 on:
   schedule:
-    - cron: "0 9 * * 1"   # toda segunda-feira às 09:00 UTC (06:00 horário de Brasília)
+    - cron: "0 9 * * 1,4" # segunda e quinta às 09:00 UTC (06:00 horário de Brasília)
   workflow_dispatch:        # disparo manual pelo painel do GitHub Actions
 
 permissions:
