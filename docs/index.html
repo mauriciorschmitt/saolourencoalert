@@ -1,123 +1,573 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Monitoramento Ambiental — Represa São Lourenço</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<meta name="description" content="Sistema automatizado de monitoramento de macrófitas aquáticas na Represa São Lourenço, Mafra (SC), usando imagens Sentinel-2.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
-:root{--bg:#f4f7f8;--card:#fff;--text:#17313a;--muted:#6b7d84;--accent:#176b62;--line:#dfe8ea;--ok:#237a4b;--warn:#a66b00;--alert:#a33a36}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,Arial,sans-serif}.wrap{max-width:1180px;margin:auto;padding:28px 18px 50px}.hero{background:linear-gradient(135deg,#123d45,#176b62);color:#fff;border-radius:24px;padding:30px;box-shadow:0 12px 35px #123d4522}.hero h1{margin:0 0 8px;font-size:clamp(25px,4vw,42px)}.hero p{margin:0;color:#dcefee}.badge{display:inline-block;margin-top:18px;padding:8px 13px;border-radius:999px;background:#ffffff20;font-size:13px}.grid{display:grid;grid-template-columns:1.1fr 2fr;gap:18px;margin-top:18px}.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px;box-shadow:0 5px 18px #17313a0b}.status{text-align:center;display:flex;flex-direction:column;justify-content:center;min-height:205px}.status .big{font-size:34px;font-weight:800;margin:8px 0}.status p{color:var(--muted);margin:0}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.metric{border:1px solid var(--line);border-radius:15px;padding:16px}.metric small{color:var(--muted)}.metric strong{display:block;font-size:27px;margin-top:7px}.section{margin-top:18px}.section h2{font-size:20px;margin:0 0 13px}.images{display:grid;grid-template-columns:1fr;gap:12px}.images img{width:100%;border-radius:14px;border:1px solid var(--line)}.meta{display:flex;gap:18px;flex-wrap:wrap;color:var(--muted);font-size:13px;margin-top:10px}.chartbox{height:350px}.controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}.controls button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 12px;cursor:pointer}.controls button.active{background:var(--accent);color:#fff;border-color:var(--accent)}#map{height:360px;border-radius:15px;overflow:hidden}.foot{color:var(--muted);font-size:12px;text-align:center;margin-top:25px}.loading{color:var(--muted)}
+/* ── tokens ─────────────────────────────────────────────────────────────── */
+:root{
+  --bg:#f0f5f4;
+  --card:#fff;
+  --text:#15302d;
+  --muted:#5f7874;
+  --accent:#155f57;
+  --accent-light:#e4f2f0;
+  --accent-mid:#2a9d8f;
+  --line:#d8e8e5;
+  --ok:#1e7d4a;
+  --ok-bg:#e6f5ec;
+  --warn:#8a5c00;
+  --warn-bg:#fef3dc;
+  --alert:#9b2c28;
+  --alert-bg:#fdecea;
+  --radius:16px;
+  --shadow:0 4px 20px #15302d0d;
+}
+/* ── reset / base ────────────────────────────────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:Inter,Arial,sans-serif;font-size:15px;line-height:1.6}
+a{color:var(--accent)}
+/* ── layout ─────────────────────────────────────────────────────────────── */
+.wrap{max-width:1160px;margin:auto;padding:24px 16px 56px}
+.section{margin-top:16px}
+/* ── hero ────────────────────────────────────────────────────────────────── */
+.hero{
+  background:linear-gradient(140deg,#0d3530 0%,#155f57 60%,#2a9d8f 100%);
+  color:#fff;border-radius:var(--radius);padding:32px 28px;
+  box-shadow:0 8px 32px #0d353022;
+  display:flex;flex-direction:column;gap:10px;
+}
+.hero-top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.hero h1{font-size:clamp(22px,3.8vw,38px);font-weight:800;line-height:1.2}
+.hero-sub{color:#c2e4e0;font-size:15px;margin-top:4px}
+.hero-live{
+  display:flex;align-items:center;gap:7px;
+  background:#ffffff18;border:1px solid #ffffff28;
+  border-radius:999px;padding:6px 14px;font-size:13px;
+  white-space:nowrap;flex-shrink:0;
+}
+.hero-live-dot{width:8px;height:8px;border-radius:50%;background:#4ade80;
+  box-shadow:0 0 0 3px #4ade8040;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 3px #4ade8040}50%{box-shadow:0 0 0 6px #4ade8015}}
+.hero-meta{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:#b0d9d5;border-top:1px solid #ffffff18;padding-top:10px;margin-top:4px}
+/* ── grid principal ──────────────────────────────────────────────────────── */
+.grid{display:grid;grid-template-columns:220px 1fr;gap:16px;margin-top:16px;align-items:start}
+/* ── card base ───────────────────────────────────────────────────────────── */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow)}
+/* ── status card ─────────────────────────────────────────────────────────── */
+.status-card{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 16px;gap:6px;min-height:180px}
+.status-label{font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+.status-big{font-size:28px;font-weight:800;line-height:1.1;margin:4px 0}
+.status-big.ok{color:var(--ok)}
+.status-big.warn{color:var(--warn)}
+.status-big.alert{color:var(--alert)}
+.status-pill{display:inline-block;border-radius:999px;padding:4px 14px;font-size:13px;font-weight:600;margin-top:4px}
+.pill-ok{background:var(--ok-bg);color:var(--ok)}
+.pill-warn{background:var(--warn-bg);color:var(--warn)}
+.pill-alert{background:var(--alert-bg);color:var(--alert)}
+.status-date{font-size:13px;color:var(--muted);margin-top:6px}
+/* ── métricas ────────────────────────────────────────────────────────────── */
+.card-title{font-size:16px;font-weight:700;margin-bottom:14px;color:var(--text)}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.metric{border:1px solid var(--line);border-radius:12px;padding:14px 12px}
+.metric-label{font-size:12px;color:var(--muted);line-height:1.3}
+.metric-value{font-size:24px;font-weight:700;margin-top:5px;color:var(--text)}
+.meta-row{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-top:12px;align-items:center}
+.cloud-chip{border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600}
+.cloud-ok{background:var(--ok-bg);color:var(--ok)}
+.cloud-warn{background:var(--warn-bg);color:var(--warn)}
+.cloud-alert{background:var(--alert-bg);color:var(--alert)}
+/* ── legenda expansível ──────────────────────────────────────────────────── */
 .legend{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
-.legend summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:600;list-style:none}
+.legend summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:600;list-style:none;user-select:none}
 .legend summary::-webkit-details-marker{display:none}
 .legend summary::before{content:"▸ ";display:inline-block;transition:transform .15s}
 .legend[open] summary::before{transform:rotate(90deg)}
 .legend dl{margin:12px 0 0;font-size:13px;color:var(--text)}
 .legend dt{font-weight:700;margin-top:10px}
 .legend dt:first-child{margin-top:0}
-.legend dd{margin:2px 0 0;color:var(--muted);line-height:1.5}
-@media(max-width:800px){.grid{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}.chartbox{height:280px}}
-.contact{margin-top:18px}
-.contact form{display:grid;gap:10px;max-width:520px}
-.contact label{font-size:13px;font-weight:600;color:var(--text)}
-.contact input,.contact textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-size:14px;color:var(--text);background:#fff}
-.contact textarea{min-height:110px;resize:vertical}
-.contact button{justify-self:start;background:var(--accent);color:#fff;border:none;border-radius:999px;padding:10px 22px;font-size:14px;font-weight:600;cursor:pointer}
-.contact button:disabled{opacity:.6;cursor:default}
-.contact .status{font-size:13px;margin-top:4px}
-.contact .status.ok{color:var(--ok)}
-.contact .status.err{color:var(--alert)}
-.contact .altlink{font-size:13px;color:var(--muted);margin-top:12px}
-.contact .altlink a{color:var(--accent)}@media(max-width:450px){.metrics{grid-template-columns:1fr 1fr}.hero{padding:22px}.wrap{padding:15px}}
-</style></head>
-<body><div class="wrap">
-<section class="hero"><h1>🛰️ Monitoramento Ambiental</h1><p>Represa São Lourenço · Mafra, Santa Catarina</p><span class="badge">Atualização automática por imagens Sentinel-2</span></section>
-<div id="app"><p class="loading">Carregando dados do monitoramento…</p></div>
-<section class="wrap" style="padding:0;max-width:none">
-<div class="card contact" style="max-width:1180px;margin:18px auto 0">
-<h2>💬 Sugestões e feedback</h2>
-<p style="color:var(--muted);font-size:14px;margin-top:-4px">Encontrou algo estranho, tem uma sugestão de melhoria ou quer relatar uma observação de campo? Manda uma mensagem — vai direto pro responsável pelo monitoramento.</p>
-<form name="contato" method="POST" data-netlify="true" netlify-honeypot="bot-field" id="contactForm">
-  <input type="hidden" name="form-name" value="contato" />
-  <p style="position:absolute;left:-9999px"><label>Não preencha isto: <input name="bot-field" /></label></p>
-  <label for="cf-name">Nome (opcional)</label>
-  <input id="cf-name" type="text" name="nome" placeholder="Seu nome">
-  <label for="cf-email">Seu e-mail (opcional, caso queira resposta)</label>
-  <input id="cf-email" type="email" name="email" placeholder="seuemail@exemplo.com">
-  <label for="cf-msg">Mensagem</label>
-  <textarea id="cf-msg" name="mensagem" required placeholder="Escreva aqui sua sugestão, dúvida ou observação..."></textarea>
-  <button type="submit" id="cf-submit">Enviar</button>
-  <div class="status" id="cf-status"></div>
-</form>
-<p class="altlink">Prefere mandar direto? Escreva para <a href="mailto:mauricio.schmitt@yahoo.com.br?subject=Feedback%20-%20Monitoramento%20S%C3%A3o%20Louren%C3%A7o">mauricio.schmitt@yahoo.com.br</a></p>
-</div>
+.legend dd{margin:3px 0 0;color:var(--muted);line-height:1.55}
+/* ── imagem ──────────────────────────────────────────────────────────────── */
+.panel-wrap img{width:100%;border-radius:10px;border:1px solid var(--line);display:block}
+.panel-labels{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
+.panel-label{background:var(--accent-light);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--accent)}
+.panel-label strong{display:block;font-size:13px;margin-bottom:2px}
+/* ── chart ───────────────────────────────────────────────────────────────── */
+.controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.controls button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 14px;cursor:pointer;font-size:13px;font-family:inherit;color:var(--muted);transition:all .15s}
+.controls button:hover{border-color:var(--accent-mid);color:var(--accent)}
+.controls button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.chartbox{height:320px}
+/* ── mapa ────────────────────────────────────────────────────────────────── */
+#map{height:340px;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+/* ── como funciona ───────────────────────────────────────────────────────── */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:16px 0}
+.step{border:1px solid var(--line);border-radius:12px;padding:16px;background:var(--bg)}
+.step-num{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-bottom:10px;flex-shrink:0}
+.step h3{font-size:14px;font-weight:700;margin-bottom:4px}
+.step p{font-size:13px;color:var(--muted);line-height:1.5}
+.btn-manual{
+  display:inline-flex;align-items:center;gap:8px;
+  background:var(--accent);color:#fff;
+  border:none;border-radius:999px;
+  padding:11px 22px;font-size:14px;font-weight:600;
+  cursor:pointer;text-decoration:none;
+  transition:background .15s;
+}
+.btn-manual:hover{background:#0e4840;color:#fff}
+.btn-manual svg{flex-shrink:0}
+.note-box{background:var(--accent-light);border-left:3px solid var(--accent-mid);border-radius:0 10px 10px 0;padding:12px 14px;font-size:13px;color:var(--accent);margin-top:14px;line-height:1.55}
+/* ── formulário ──────────────────────────────────────────────────────────── */
+.contact-form{display:grid;gap:10px;max-width:520px;margin-top:14px}
+.contact-form label{font-size:13px;font-weight:600;color:var(--text)}
+.contact-form input,.contact-form textarea{
+  width:100%;padding:10px 12px;
+  border:1px solid var(--line);border-radius:10px;
+  font-family:inherit;font-size:14px;color:var(--text);background:#fff;
+  transition:border-color .15s;
+}
+.contact-form input:focus,.contact-form textarea:focus{outline:none;border-color:var(--accent-mid)}
+.contact-form textarea{min-height:110px;resize:vertical}
+.contact-form .btn-send{
+  justify-self:start;background:var(--accent);color:#fff;
+  border:none;border-radius:999px;padding:10px 22px;
+  font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;
+}
+.contact-form .btn-send:disabled{opacity:.6;cursor:default}
+.form-status{font-size:13px;margin-top:4px}
+.form-status.ok{color:var(--ok)}
+.form-status.err{color:var(--alert)}
+.altlink{font-size:13px;color:var(--muted);margin-top:12px}
+.altlink a{color:var(--accent)}
+/* ── footer ──────────────────────────────────────────────────────────────── */
+.foot{color:var(--muted);font-size:12px;text-align:center;margin-top:32px;line-height:1.8}
+.foot a{color:var(--muted)}
+/* ── loading / erro ──────────────────────────────────────────────────────── */
+.loading{color:var(--muted);padding:32px 0;text-align:center}
+/* ── responsivo ──────────────────────────────────────────────────────────── */
+@media(max-width:860px){
+  .grid{grid-template-columns:1fr}
+  .metrics{grid-template-columns:repeat(2,1fr)}
+  .steps{grid-template-columns:1fr}
+  .chartbox{height:260px}
+  .panel-labels{grid-template-columns:1fr}
+}
+@media(max-width:480px){
+  .hero{padding:22px 18px}
+  .wrap{padding:14px 12px 48px}
+  .hero-live{display:none}
+  .metrics{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ── HERO ──────────────────────────────────────────────────────────────── -->
+<section class="hero">
+  <div class="hero-top">
+    <div>
+      <h1>🛰️ Monitoramento Ambiental</h1>
+      <p class="hero-sub">Represa São Lourenço · Mafra, Santa Catarina</p>
+    </div>
+    <div class="hero-live">
+      <span class="hero-live-dot"></span>
+      Atualização automática semanal
+    </div>
+  </div>
+  <div class="hero-meta">
+    <span>Satélite: Sentinel-2 / Copernicus</span>
+    <span>Indicadores: NDVI · NDWI · NDMI</span>
+    <span>Série histórica desde 2016</span>
+  </div>
 </section>
-<footer class="foot">Projeto de monitoramento remoto · Dados processados automaticamente · Sentinel-2 / Copernicus Data Space</footer>
-</div>
+
+<!-- ── CONTEÚDO DINÂMICO ──────────────────────────────────────────────────── -->
+<div id="app"><p class="loading">Carregando dados do monitoramento…</p></div>
+
+<!-- ── COMO FUNCIONA ──────────────────────────────────────────────────────── -->
+<section class="section card" id="sec-como">
+  <h2 class="card-title">📚 Como funciona o sistema</h2>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <h3>Coleta de imagens</h3>
+      <p>Todo Monday o sistema busca automaticamente as imagens Sentinel-2 dos últimos 30 dias e seleciona a de menor cobertura de nuvens.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <h3>Cálculo dos índices</h3>
+      <p>São calculados NDVI, NDWI e NDMI sobre os pixels válidos do reservatório, excluindo nuvens e sombras pela máscara SCL.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <h3>Detecção de anomalias</h3>
+      <p>O NDVI é comparado à climatologia histórica do mês (período 2016–2024). Um z-score ≥ 2,0 dispara o alerta de possível surto de macrófitas.</p>
+    </div>
+  </div>
+  <div class="note-box">
+    <strong>Sobre o limiar de nuvens:</strong> 10% de cobertura é uma referência de qualidade, não um bloqueio. Mesmo com cobertura mais elevada, a imagem é processada quando há pixels válidos suficientes — e a porcentagem de nuvens é sempre informada no relatório.
+  </div>
+  <div style="margin-top:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <a class="btn-manual"
+       href="https://docs.google.com/document/d/1ewN47MxrFotTl96dtR5dKqtNZt4cP8jBaFofFWj2hm0/edit?usp=drive_link"
+       target="_blank" rel="noopener noreferrer">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+      </svg>
+      Manual completo do sistema
+    </a>
+    <span style="font-size:13px;color:var(--muted)">Abre no Google Drive · documentação técnica e metodológica</span>
+  </div>
+</section>
+
+<!-- ── FORMULÁRIO ──────────────────────────────────────────────────────────── -->
+<section class="section card">
+  <h2 class="card-title">💬 Sugestões e feedback</h2>
+  <p style="color:var(--muted);font-size:14px">Encontrou algo estranho, tem uma sugestão ou quer relatar uma observação de campo? A mensagem vai direto para o responsável pelo monitoramento.</p>
+  <form class="contact-form" name="contato" method="POST" data-netlify="true" netlify-honeypot="bot-field" id="contactForm">
+    <input type="hidden" name="form-name" value="contato">
+    <p style="position:absolute;left:-9999px"><label>Não preencha: <input name="bot-field"></label></p>
+    <label for="cf-name">Nome (opcional)</label>
+    <input id="cf-name" type="text" name="nome" placeholder="Seu nome">
+    <label for="cf-email">E-mail (opcional, caso queira resposta)</label>
+    <input id="cf-email" type="email" name="email" placeholder="seuemail@exemplo.com">
+    <label for="cf-msg">Mensagem</label>
+    <textarea id="cf-msg" name="mensagem" required placeholder="Escreva aqui sua sugestão, dúvida ou observação de campo…"></textarea>
+    <button type="submit" class="btn-send" id="cf-submit">Enviar mensagem</button>
+    <div class="form-status" id="cf-status"></div>
+  </form>
+  <p class="altlink">Prefere mandar direto? Escreva para <a href="mailto:mauricio.schmitt@yahoo.com.br?subject=Feedback%20-%20Monitoramento%20S%C3%A3o%20Louren%C3%A7o">mauricio.schmitt@yahoo.com.br</a></p>
+</section>
+
+<!-- ── FOOTER ──────────────────────────────────────────────────────────────── -->
+<footer class="foot">
+  Monitoramento remoto automatizado · dados processados via Sentinel-2 / Copernicus Data Space<br>
+  Universidade do Contestado · Programa de Pós-graduação em Engenharia Civil Sanitária e Ambiental<br>
+  <a href="https://github.com/mauriciorschmitt/saolourencoalert" target="_blank" rel="noopener">Código-fonte no GitHub</a>
+</footer>
+
+</div><!-- /wrap -->
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-let latest=null, historyData=[], chart=null;
-const fmt=(v,d=3)=>Number.isFinite(Number(v))?Number(v).toFixed(d).replace('.',','):'—';
-const statusClass=s=>s==='ALERTA'?'alert':s==='ATENÇÃO'?'warn':'ok';
-async function load(){
- try{latest=await fetch('data/ultimo.json?'+Date.now()).then(r=>r.json()); historyData=await fetch('data/historico.csv?'+Date.now()).then(r=>r.text()).then(parseCSV); render();}catch(e){document.getElementById('app').innerHTML='<div class="card"><h2>Dados indisponíveis</h2><p>O dashboard ainda não recebeu uma execução do monitoramento.</p></div>';}}
-function parseCSV(t){let lines=t.trim().split(/\r?\n/);if(lines.length<2)return[];let h=lines[0].split(',');return lines.slice(1).map(x=>{let v=x.split(',');return Object.fromEntries(h.map((k,i)=>[k,v[i]]));}).filter(x=>x.date);}
-function render(){
- const s=latest.status||'SEM DADOS';
- document.getElementById('app').innerHTML=`
- <div class="grid"><div class="card status"><small>STATUS ATUAL</small><div class="big">${s==='ALERTA'?'🔴':s==='ATENÇÃO'?'🟡':'🟢'} ${s}</div><p>Imagem analisada: <b>${latest.date||'—'}</b></p><div class="meta"><span>Atualizado: ${latest.updated_at?new Date(latest.updated_at).toLocaleString('pt-BR'): '—'}</span></div></div>
- <div class="card"><h2>Indicadores da última imagem</h2><div class="metrics"><div class="metric"><small>🌿 NDVI</small><strong>${fmt(latest.ndvi)}</strong></div><div class="metric"><small>💧 NDWI</small><strong>${fmt(latest.ndwi)}</strong></div><div class="metric"><small>🌱 NDMI</small><strong>${fmt(latest.ndmi)}</strong></div><div class="metric"><small>📊 Z-score</small><strong>${fmt(latest.zscore,2)}</strong></div></div><div class="meta"><span>☁️ Nuvens: <b>${fmt(latest.cloud_pct,1)}%</b></span><span>Pixels válidos: <b>${fmt(Number(latest.valid_fraction)*100,1)}%</b></span></div>
- <details class="legend"><summary>O que significa cada indicador?</summary><dl>
- <dt>🌿 NDVI — Índice de Vegetação por Diferença Normalizada</dt><dd>Mede a quantidade de vegetação viva na superfície da água. Valores próximos de zero ou negativos indicam água aberta (situação normal do reservatório). Valores crescentes acima de ~0,4 indicam presença de macrófitas; próximo de 0,8, cobertura quase total pela planta.</dd>
- <dt>💧 NDWI — Índice de Água por Diferença Normalizada</dt><dd>Mede a presença de água aberta na superfície — em geral varia de forma oposta ao NDVI. Valores altos/positivos indicam água limpa; valores baixos/negativos indicam vegetação ou solo exposto cobrindo a superfície.</dd>
- <dt>🌱 NDMI — Índice de Umidade por Diferença Normalizada</dt><dd>Mede o teor de umidade da cobertura de superfície. Ajuda a diferenciar vegetação/água úmida de áreas secas, complementando o NDVI e o NDWI na leitura da cena.</dd>
- <dt>📊 Z-score</dt><dd>Quantos desvios-padrão o NDVI do dia está <b>acima</b> da média histórica esperada para aquele mês (climatologia pré-surto). Z ≥ 2,0 → <b>ALERTA</b> (indício estatístico de novo surto). Entre 1,5 e 2,0 → <b>ATENÇÃO</b>. Abaixo disso → <b>NORMAL</b>. Um NDVI mais baixo que o esperado não gera alerta — só indica um reservatório mais limpo que o normal, o que não é motivo de preocupação.</dd>
- </dl></details>
- </div></div></div>
- <section class="section card"><h2>🛰️ Imagem mais recente — RGB + NDVI + NDWI</h2><div class="images"><img src="images/latest/panel.png?${Date.now()}" alt="Painel RGB, NDVI e NDWI"></div><div class="meta"><span>Data: ${latest.date||'—'}</span><span>${latest.cloud_note||''}</span></div></section>
- <section class="section card"><h2>📈 Série temporal</h2><div class="controls"><button class="active" data-key="ndvi">NDVI</button><button data-key="ndwi">NDWI</button><button data-key="ndmi">NDMI</button><button data-key="zscore">Z-score</button><button data-key="cloud_pct">Nuvens</button></div><div class="chartbox"><canvas id="chart"></canvas></div></section>
- <section class="section card"><h2>🗺️ Área de estudo</h2><div id="map"></div></section>
- <section class="section card"><h2>📚 Como funciona</h2><p>O sistema consulta imagens Sentinel-2 automaticamente, aplica a máscara de nuvens SCL e calcula NDVI, NDWI e NDMI sobre a área da Represa São Lourenço. O NDVI é comparado à climatologia mensal por Z-score.</p><p><b>Importante:</b> 10% de cobertura de nuvens é uma referência de qualidade, não um bloqueio. Mesmo com cobertura elevada, a imagem pode ser publicada quando houver pixels válidos para análise.</p></section>`;
- drawChart('ndvi'); document.querySelectorAll('.controls button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.controls button').forEach(x=>x.classList.remove('active'));b.classList.add('active');drawChart(b.dataset.key)}); drawMap();
-}
-function drawChart(key){if(chart)chart.destroy();let ctx=document.getElementById('chart');let labels=historyData.map(x=>x.date);let vals=historyData.map(x=>Number(x[key]));chart=new Chart(ctx,{type:'line',data:{labels,datasets:[{label:key.toUpperCase(),data:vals,tension:.25,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{maxTicksLimit:10}},y:{beginAtZero:false}}}})}
-function drawMap(){const map=L.map('map').setView([-26.181,-49.892],14);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);fetch('data/roi.geojson').then(r=>r.json()).then(g=>{let layer=L.geoJSON(g,{style:{weight:2,fillOpacity:.12}}).addTo(map);map.fitBounds(layer.getBounds(),{padding:[20,20]});});}
-load();
+// ── utilitários ──────────────────────────────────────────────────────────────
+let latest = null, historyData = [], chart = null;
+const fmt = (v, d = 3) =>
+  Number.isFinite(Number(v)) ? Number(v).toFixed(d).replace('.', ',') : '—';
+const esc = s => String(s)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  .replace(/"/g,'&quot;');
 
-// Contact form: submit via fetch to avoid a page reload (Netlify Forms
-// picks this up automatically once the site is deployed on Netlify).
-const contactForm = document.getElementById('contactForm');
-if (contactForm) {
-  contactForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const btn = document.getElementById('cf-submit');
-    const status = document.getElementById('cf-status');
-    const data = new FormData(contactForm);
-    btn.disabled = true;
-    status.className = 'status';
-    status.textContent = 'Enviando...';
-    try {
-      const resp = await fetch('/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams(data).toString(),
-      });
-      if (resp.ok) {
-        status.className = 'status ok';
-        status.textContent = '✅ Mensagem enviada, obrigado!';
-        contactForm.reset();
-      } else {
-        throw new Error('resposta ' + resp.status);
+function statusClass(s) {
+  if (s === 'ALERTA')  return 'alert';
+  if (s === 'ATENÇÃO') return 'warn';
+  return 'ok';
+}
+function pillClass(s) {
+  return 'pill-' + statusClass(s);
+}
+function cloudClass(pct) {
+  const p = Number(pct);
+  if (p >= 50) return 'cloud-alert';
+  if (p >= 20) return 'cloud-warn';
+  return 'cloud-ok';
+}
+
+// ── carregamento de dados ────────────────────────────────────────────────────
+async function load() {
+  try {
+    const [latestRaw, csvRaw] = await Promise.all([
+      fetch('data/ultimo.json?' + Date.now()).then(r => r.json()),
+      fetch('data/historico.csv?' + Date.now()).then(r => r.text()),
+    ]);
+    latest = latestRaw;
+    historyData = parseCSV(csvRaw);
+    render();
+  } catch (e) {
+    document.getElementById('app').innerHTML =
+      '<div class="card" style="margin-top:16px"><h2>Dados indisponíveis</h2>' +
+      '<p style="color:var(--muted);margin-top:8px">O painel ainda não recebeu uma execução do monitoramento, ' +
+      'ou os arquivos de dados não foram publicados. Tente novamente em alguns instantes.</p></div>';
+  }
+}
+
+function parseCSV(t) {
+  const lines = t.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const h = lines[0].split(',');
+  return lines.slice(1)
+    .map(x => Object.fromEntries(h.map((k, i) => [k, x.split(',')[i]])))
+    .filter(x => x.date);
+}
+
+// ── renderização principal ───────────────────────────────────────────────────
+function render() {
+  const s  = latest.status || 'SEM DADOS';
+  const sc = statusClass(s);
+  const updatedAt = latest.updated_at
+    ? new Date(latest.updated_at).toLocaleString('pt-BR', {
+        day:'2-digit', month:'2-digit', year:'numeric',
+        hour:'2-digit', minute:'2-digit'
+      })
+    : '—';
+  const cloudPct = Number(latest.cloud_pct);
+
+  document.getElementById('app').innerHTML = `
+    <!-- status + métricas -->
+    <div class="grid" style="margin-top:16px">
+      <div class="card status-card">
+        <div class="status-label">Status atual</div>
+        <div class="status-big ${sc}">
+          ${s === 'ALERTA' ? '🔴' : s === 'ATENÇÃO' ? '🟡' : '🟢'} ${esc(s)}
+        </div>
+        <span class="status-pill ${pillClass(s)}">${esc(s)}</span>
+        <div class="status-date">Imagem de <b>${esc(latest.date || '—')}</b></div>
+        <div class="status-date" style="font-size:12px">Atualizado: ${updatedAt}</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Indicadores da cena mais recente</div>
+        <div class="metrics">
+          <div class="metric">
+            <div class="metric-label">🌿 NDVI<br>vegetação</div>
+            <div class="metric-value">${fmt(latest.ndvi)}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">💧 NDWI<br>água</div>
+            <div class="metric-value">${fmt(latest.ndwi)}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">🌱 NDMI<br>umidade</div>
+            <div class="metric-value">${fmt(latest.ndmi)}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">📊 Z-score<br>desvio do normal</div>
+            <div class="metric-value">${fmt(latest.zscore, 2)}</div>
+          </div>
+        </div>
+
+        <div class="meta-row">
+          <span>Pixels válidos: <b>${fmt(Number(latest.valid_fraction) * 100, 1)}%</b></span>
+          <span class="cloud-chip ${cloudClass(cloudPct)}">
+            ☁️ ${fmt(cloudPct, 1)}% de nuvens
+          </span>
+        </div>
+
+        <details class="legend">
+          <summary>O que significa cada indicador?</summary>
+          <dl>
+            <dt>🌿 NDVI — Índice de Vegetação por Diferença Normalizada</dt>
+            <dd>Mede a presença de vegetação viva sobre a água. Valores negativos ou próximos de zero indicam água aberta (situação normal do reservatório). Valores crescentes acima de 0,4 indicam macrófitas; próximo de 0,8, cobertura quase total.</dd>
+            <dt>💧 NDWI — Índice de Água por Diferença Normalizada</dt>
+            <dd>Detecta água aberta na superfície — em geral varia de forma oposta ao NDVI. Valores altos/positivos indicam água limpa; valores baixos/negativos, vegetação ou solo cobrindo a superfície.</dd>
+            <dt>🌱 NDMI — Índice de Umidade por Diferença Normalizada</dt>
+            <dd>Mede o teor de umidade da cobertura de superfície, complementando o NDVI e o NDWI na leitura da cena.</dd>
+            <dt>📊 Z-score</dt>
+            <dd>Quantos desvios-padrão o NDVI do dia está <b>acima</b> da média histórica esperada para aquele mês. Z ≥ 2,0 → <b>ALERTA</b>. Entre 1,5 e 2,0 → <b>ATENÇÃO</b>. Abaixo disso → <b>NORMAL</b>. NDVI abaixo do esperado não gera alerta — indica reservatório mais limpo que o habitual.</dd>
+          </dl>
+        </details>
+      </div>
+    </div>
+
+    <!-- imagem -->
+    <section class="section card">
+      <div class="card-title">🛰️ Imagem mais recente — ${esc(latest.date || '—')}</div>
+      <div class="panel-wrap">
+        <img src="images/latest/panel.png?${Date.now()}" alt="Painel com cor real, NDVI e NDWI do reservatório">
+      </div>
+      <div class="panel-labels">
+        <div class="panel-label">
+          <strong>Cor real (RGB)</strong>
+          Composição natural das bandas visíveis. Vegetação aparece em verde, água em azul-escuro, nuvens em branco/cinza.
+        </div>
+        <div class="panel-label">
+          <strong>NDVI colorido</strong>
+          Tons quentes (marrom/bege) = água ou solo. Tons verdes crescentes = presença de vegetação. Verde escuro = cobertura densa de macrófitas.
+        </div>
+        <div class="panel-label">
+          <strong>NDWI colorido</strong>
+          Azul escuro = água aberta. Tons claros/bege = vegetação ou solo cobrindo a superfície.
+        </div>
+      </div>
+    </section>
+
+    <!-- série temporal -->
+    <section class="section card">
+      <div class="card-title">📈 Série temporal</div>
+      <div class="controls">
+        <button class="active" data-key="ndvi">NDVI</button>
+        <button data-key="ndwi">NDWI</button>
+        <button data-key="ndmi">NDMI</button>
+        <button data-key="zscore">Z-score</button>
+        <button data-key="cloud_pct">Nuvens (%)</button>
+      </div>
+      <div class="chartbox"><canvas id="chart"></canvas></div>
+    </section>
+
+    <!-- mapa -->
+    <section class="section card">
+      <div class="card-title">🗺️ Área de estudo</div>
+      <div id="map"></div>
+    </section>
+  `;
+
+  drawChart('ndvi');
+  document.querySelectorAll('.controls button').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('.controls button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      drawChart(btn.dataset.key);
+    };
+  });
+  drawMap();
+}
+
+// ── gráfico ──────────────────────────────────────────────────────────────────
+function drawChart(key) {
+  if (chart) chart.destroy();
+  const ctx    = document.getElementById('chart');
+  const labels = historyData.map(x => x.date);
+  const vals   = historyData.map(x => Number(x[key]));
+  const isZ    = key === 'zscore';
+
+  // linhas de referência para z-score
+  const plugins = {};
+  const annotations = {};
+  if (isZ) {
+    annotations.alertLine = {
+      type: 'line', yMin: 2, yMax: 2,
+      borderColor: 'rgba(163,58,54,0.55)', borderWidth: 1.5,
+      borderDash: [5, 4],
+      label: { content: 'Alerta (2,0)', display: true, position: 'end', font: {size: 11} }
+    };
+    annotations.warnLine = {
+      type: 'line', yMin: 1.5, yMax: 1.5,
+      borderColor: 'rgba(166,107,0,0.45)', borderWidth: 1.5,
+      borderDash: [4, 4],
+      label: { content: 'Atenção (1,5)', display: true, position: 'end', font: {size: 11} }
+    };
+  }
+
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: key.toUpperCase().replace('_PCT', ' (%)'),
+        data: vals,
+        tension: .25,
+        fill: false,
+        borderColor: '#155f57',
+        pointRadius: historyData.length > 60 ? 2 : 4,
+        pointBackgroundColor: '#155f57',
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${key.toUpperCase()}: ${Number(ctx.raw).toFixed(3).replace('.', ',')}`,
+          }
+        },
+      },
+      scales: {
+        x: { ticks: { maxTicksLimit: 10, font: { size: 11 } }, grid: { color: '#d8e8e5' } },
+        y: { beginAtZero: false, grid: { color: '#d8e8e5' }, ticks: { font: { size: 11 } } },
       }
-    } catch (err) {
-      status.className = 'status err';
-      status.textContent = '⚠️ Não deu pra enviar por aqui. Usa o link de e-mail direto logo abaixo, por favor.';
-    } finally {
-      btn.disabled = false;
     }
   });
+
+  // linhas de limiar desenhadas manualmente no z-score (sem plugin externo)
+  if (isZ) {
+    const originalDraw = chart.draw.bind(chart);
+    chart.draw = function() {
+      originalDraw();
+      const { ctx: c, chartArea: { left, right }, scales: { y } } = chart;
+      const thresholds = [
+        { val: 2.0, color: 'rgba(163,58,54,0.6)',  label: 'Alerta (2,0)' },
+        { val: 1.5, color: 'rgba(166,107,0,0.5)',  label: 'Atenção (1,5)' },
+      ];
+      thresholds.forEach(({ val, color, label }) => {
+        const yPos = y.getPixelForValue(val);
+        if (yPos === undefined) return;
+        c.save();
+        c.setLineDash([5, 4]);
+        c.strokeStyle = color;
+        c.lineWidth = 1.5;
+        c.beginPath();
+        c.moveTo(left, yPos);
+        c.lineTo(right, yPos);
+        c.stroke();
+        c.setLineDash([]);
+        c.fillStyle = color;
+        c.font = '11px Inter, Arial, sans-serif';
+        c.fillText(label, right - 90, yPos - 4);
+        c.restore();
+      });
+    };
+    chart.draw();
+  }
 }
-</script></body></html>
+
+// ── mapa ──────────────────────────────────────────────────────────────────────
+function drawMap() {
+  const map = L.map('map').setView([-26.181, -49.892], 14);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap',
+    maxZoom: 18,
+  }).addTo(map);
+  fetch('data/roi.geojson')
+    .then(r => r.json())
+    .then(g => {
+      const layer = L.geoJSON(g, {
+        style: { color: '#155f57', weight: 2.5, fillColor: '#2a9d8f', fillOpacity: .15 }
+      }).addTo(map);
+      map.fitBounds(layer.getBounds(), { padding: [24, 24] });
+    });
+}
+
+// ── formulário de contato ─────────────────────────────────────────────────────
+document.addEventListener('submit', async e => {
+  if (e.target.id !== 'contactForm') return;
+  e.preventDefault();
+  const btn    = document.getElementById('cf-submit');
+  const status = document.getElementById('cf-status');
+  btn.disabled = true;
+  status.className = 'form-status';
+  status.textContent = 'Enviando…';
+  try {
+    const resp = await fetch('/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(new FormData(e.target)).toString(),
+    });
+    if (resp.ok) {
+      status.className = 'form-status ok';
+      status.textContent = '✅ Mensagem enviada — obrigado!';
+      e.target.reset();
+    } else {
+      throw new Error(resp.status);
+    }
+  } catch {
+    status.className = 'form-status err';
+    status.textContent = '⚠️ Não deu pra enviar por aqui. Use o e-mail direto logo abaixo.';
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+load();
+</script>
+</body>
+</html>
