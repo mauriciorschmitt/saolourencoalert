@@ -2,42 +2,101 @@ name: Monitoramento Ambiental São Lourenço
 
 on:
   schedule:
-    - cron: "0 9 * * 1"
-  workflow_dispatch:
+    - cron: "0 9 * * 1"   # toda segunda-feira às 09:00 UTC (06:00 horário de Brasília)
+  workflow_dispatch:        # disparo manual pelo painel do GitHub Actions
 
 permissions:
-  contents: write
+  contents: write           # necessário para o git push dos dados do painel
 
 jobs:
   monitor:
     runs-on: ubuntu-latest
+    timeout-minutes: 25     # execuções travadas não consomem minutos gratuitos indefinidamente
+
     steps:
+
+      # ── 1. Checkout ─────────────────────────────────────────────────────────
       - name: Baixar repositório
         uses: actions/checkout@v4
 
-      - name: Configurar Python
+      # ── 2. Python ───────────────────────────────────────────────────────────
+      - name: Configurar Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
+      # ── 3. Cache de pip (economiza ~35 s quando requirements.txt não mudou) ─
+      - name: Cache de dependências pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      # ── 4. Instalar dependências ─────────────────────────────────────────────
       - name: Instalar dependências
         run: pip install -r requirements.txt
 
+      # ── 5. Executar monitoramento ────────────────────────────────────────────
       - name: Executar monitoramento
         env:
-          SH_CLIENT_ID: ${{ secrets.SH_CLIENT_ID }}
-          SH_CLIENT_SECRET: ${{ secrets.SH_CLIENT_SECRET }}
+          # ── Sentinel Hub / Copernicus ──────────────────────────────────────
+          SH_CLIENT_ID:       ${{ secrets.SH_CLIENT_ID }}
+          SH_CLIENT_SECRET:   ${{ secrets.SH_CLIENT_SECRET }}
+          # ── Telegram ──────────────────────────────────────────────────────
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          # ── E-mail ────────────────────────────────────────────────────────
+          # Gmail (padrão): deixe HOST e PORT em branco
+          # Outlook/Office365: HOST=smtp.office365.com  PORT=587
+          EMAIL_ADDRESS:      ${{ secrets.EMAIL_ADDRESS }}
           EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
-          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+          ALERT_EMAIL_TO:     ${{ secrets.ALERT_EMAIL_TO }}
+          EMAIL_SMTP_HOST:    ${{ secrets.EMAIL_SMTP_HOST }}
+          EMAIL_SMTP_PORT:    ${{ secrets.EMAIL_SMTP_PORT }}
+          # ── WhatsApp via CallMeBot (opcional) ─────────────────────────────
+          # Siga callmebot.com para obter sua APIKEY gratuita
+          WHATSAPP_PHONE:     ${{ secrets.WHATSAPP_PHONE }}
+          WHATSAPP_APIKEY:    ${{ secrets.WHATSAPP_APIKEY }}
         run: python monitor_ndvi.py
 
-      - name: Publicar dados e imagens no repositório
+      # ── 6. Publicar dados e imagens no repositório ───────────────────────────
+      # O commit [skip ci] evita que este push acione o workflow de novo.
+      - name: Publicar dados no repositório
         run: |
-          git config user.name "github-actions[bot]"
+          git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/data docs/images
-          git diff --cached --quiet || git commit -m "Atualiza monitoramento São Lourenço"
+          git diff --cached --quiet || \
+            git commit -m "chore: atualiza monitoramento São Lourenço [skip ci]"
           git push
+
+      # ── 7. Backup do painel como artefato do workflow (30 dias) ─────────────
+      # Disponível na aba Actions mesmo em repositório privado ou após rebase.
+      - name: Salvar painel como artefato
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: panel-${{ github.run_id }}
+          path: docs/images/latest/panel.png
+          if-no-files-found: ignore
+          retention-days: 30
+
+      # ── 8. Notificar falha crítica (backup antes mesmo do Python rodar) ──────
+      # Cobre casos em que pip install falha ou o runner não inicializa.
+      - name: Notificar falha crítica
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+            IFS=',' read -ra IDS <<< "$TELEGRAM_CHAT_ID"
+            for ID in "${IDS[@]}"; do
+              curl -s -X POST \
+                "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+                -d "chat_id=${ID// /}" \
+                -d "text=[ERRO CRÍTICO] Workflow de monitoramento São Lourenço falhou antes do Python. Verifique: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+                > /dev/null
+            done
+          fi
