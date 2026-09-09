@@ -40,6 +40,7 @@ from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
+from typing import Optional, Tuple
 
 import requests
 from pyproj import Transformer
@@ -270,7 +271,7 @@ def _iter_coords(coords):
         for item in coords:
             yield from _iter_coords(item)
 
-def reproject_to_utm(geometry: dict) -> tuple[dict, int]:
+def reproject_to_utm(geometry: dict) -> Tuple[dict, int]:
     """Reprojeta geometria GeoJSON de EPSG:4326 para a zona UTM local."""
     pts = list(_iter_coords(geometry["coordinates"]))
     lon_c = sum(p[0] for p in pts) / len(pts)
@@ -438,7 +439,7 @@ def _load_font(size: int = 14):
                 pass
     return ImageFont.load_default()
 
-def build_panel(token: str, date_str: str, roi_wgs84: dict) -> bytes | None:
+def build_panel(token: str, date_str: str, roi_wgs84: dict) -> Optional[bytes]:
     """
     Gera PNG composto (cor real | NDVI | NDWI) para uma data.
     Retorna bytes ou None se falhar (etapa não-bloqueante).
@@ -487,7 +488,7 @@ def build_panel(token: str, date_str: str, roi_wgs84: dict) -> bytes | None:
 # 8. DETECÇÃO DE ANOMALIA
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def check_anomaly(date_str: str, ndvi: float) -> tuple[float, bool]:
+def check_anomaly(date_str: str, ndvi: float) -> Tuple[float, bool]:
     month = int(date_str.split("-")[1])
     c     = MONTHLY_CLIMATOLOGY[month]
     z     = (ndvi - c["mean"]) / c["sd"]
@@ -516,7 +517,7 @@ SCENES_30D_JSON  = DATA_DIR / "passagens_30d.json"
 CSV_FIELDS = ["date", "ndvi", "ndwi", "ndmi", "cloud_pct",
               "valid_fraction", "zscore", "status"]
 
-def save_panel_bytes(panel_bytes: bytes | None, date_str: str,
+def save_panel_bytes(panel_bytes: Optional[bytes], date_str: str,
                      is_best: bool = False) -> None:
     if not panel_bytes:
         return
@@ -609,7 +610,7 @@ def save_all(scenes: list[dict], best: dict, z: float, run_id: str) -> dict:
 
 # ── Telegram ─────────────────────────────────────────────────────────────────
 
-def send_telegram(message: str, image_bytes: bytes | None = None):
+def send_telegram(message: str, image_bytes: Optional[bytes] = None):
     token    = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_raw = os.environ.get("TELEGRAM_CHAT_ID")
     if not token or not chat_raw:
@@ -667,15 +668,15 @@ def send_whatsapp(message: str):
 # Outlook: EMAIL_SMTP_HOST=smtp.office365.com  EMAIL_SMTP_PORT=587  (STARTTLS)
 # Se EMAIL_SMTP_HOST não estiver definido, usa Gmail como padrão.
 
-def send_email(subject: str, message: str, image_bytes: bytes | None = None):
+def send_email(subject: str, message: str, image_bytes: Optional[bytes] = None):
     addr     = os.environ.get("EMAIL_ADDRESS")
     password = os.environ.get("EMAIL_APP_PASSWORD")
     to_raw   = os.environ.get("ALERT_EMAIL_TO")
     if not addr or not password or not to_raw:
         log.info("E-mail não configurado; pulando.")
         return
-    smtp_host = os.environ.get("EMAIL_SMTP_HOST", "smtp.gmail.com")
-    smtp_port = int(os.environ.get("EMAIL_SMTP_PORT", "465"))
+    smtp_host = os.environ.get("EMAIL_SMTP_HOST") or "smtp.gmail.com"
+    smtp_port = int(os.environ.get("EMAIL_SMTP_PORT") or "465")
     to_addrs  = [a.strip() for a in to_raw.split(",") if a.strip()]
 
     if image_bytes:
