@@ -268,9 +268,7 @@ a{color:var(--accent)}
 <section class="section card">
   <h2 class="card-title">💬 Sugestões e feedback</h2>
   <p style="color:var(--muted);font-size:14px">Encontrou algo estranho, tem uma sugestão ou quer relatar uma observação de campo? A mensagem vai direto para o responsável pelo monitoramento.</p>
-  <form class="contact-form" name="contato" method="POST" data-netlify="true" netlify-honeypot="bot-field" id="contactForm">
-    <input type="hidden" name="form-name" value="contato">
-    <p style="position:absolute;left:-9999px"><label>Não preencha: <input name="bot-field"></label></p>
+  <form class="contact-form" id="contactForm">
     <label for="cf-name">Nome (opcional)</label>
     <input id="cf-name" type="text" name="nome" placeholder="Seu nome">
     <label for="cf-email">E-mail (opcional, caso queira resposta)</label>
@@ -576,20 +574,31 @@ function drawMap() {
     });
 }
 
-// ── formulário de contato ─────────────────────────────────────────────────────
+// ── formulário de contato (Formspree) ────────────────────────────────────────
+// Troque SEU_FORMSPREE_ID pelo ID gerado em formspree.io/new
+// Ex.: se o endpoint for https://formspree.io/f/xpwzgkla, o ID é xpwzgkla
+const FORMSPREE_ID = 'xljeaobo';
+
 document.addEventListener('submit', async e => {
   if (e.target.id !== 'contactForm') return;
   e.preventDefault();
   const btn    = document.getElementById('cf-submit');
   const status = document.getElementById('cf-status');
+
+  if (FORMSPREE_ID === 'SEU_FORMSPREE_ID') {
+    status.className = 'form-status err';
+    status.textContent = '⚠️ Formulário ainda não configurado. Use o e-mail direto abaixo.';
+    return;
+  }
+
   btn.disabled = true;
   status.className = 'form-status';
   status.textContent = 'Enviando…';
   try {
-    const resp = await fetch('/', {
+    const resp = await fetch(`https://formspree.io/f/${FORMSPREE_ID}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams(new FormData(e.target)).toString(),
+      headers: { 'Accept': 'application/json' },
+      body: new FormData(e.target),
     });
     if (resp.ok) {
       status.className = 'form-status ok';
