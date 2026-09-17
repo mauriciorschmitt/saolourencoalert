@@ -1,7 +1,7 @@
 {
   "schema_version": "3.0",
-  "run_id": "e2640307-21df-432c-ab55-f4f2fa4bf7d0",
-  "updated_at": "2026-09-14T09:11:17.340026+00:00",
+  "run_id": "4f8df9a9-595f-4f7c-bdb0-327e2349c0ca",
+  "updated_at": "2026-09-17T14:06:03.293610+00:00",
   "lookback_days": 30,
   "scenes": [
     {
@@ -25,6 +25,18 @@
       "valid_fraction": 0.686,
       "best": true,
       "zscore": 0.7088,
+      "status": "NORMAL",
+      "has_image": true
+    },
+    {
+      "date": "2026-09-15",
+      "ndvi": -0.1765316881192685,
+      "ndwi": 0.20156666365948592,
+      "ndmi": 0.12457939853528159,
+      "cloud_pct": 75.4,
+      "valid_fraction": 0.246,
+      "best": false,
+      "zscore": -3.0841,
       "status": "NORMAL",
       "has_image": true
     }
