@@ -88,6 +88,32 @@ ATTENTION_Z        = 1.5   # limiar intermediário
 LOOKBACK_DAYS      = 30    # janela de busca
 MIN_VALID_FRACTION = 0.01  # descarta apenas cenas ~100% nubladas
 
+# ── Confiabilidade da observação ───────────────────────────────────────────
+# O filtro de ingestão continua permissivo de propósito: queremos TODAS as
+# passagens no histórico. Mas uma média calculada sobre 5% da represa não é
+# comparável a uma calculada sobre 100%, então cada observação é rotulada e
+# o painel/as notificações tratam os rótulos de forma diferente.
+RELIABLE_VALID_FRACTION = 0.70   # >= : confiança ALTA
+USABLE_VALID_FRACTION   = 0.30   # >= : confiança MÉDIA (abaixo: BAIXA)
+
+# Confiança mínima para DISPARAR notificação de alerta.
+# "ALTA" (só cenas limpas) | "MEDIA" (padrão) | "BAIXA" (notifica sempre).
+# Observações abaixo do corte continuam gravadas no histórico e visíveis no
+# painel -- apenas não geram push. Evita que alerta falso recorrente treine
+# o destinatário a ignorar todos os alertas.
+NOTIFY_MIN_CONFIDENCE = "MEDIA"
+
+# ── Persistência do alerta ─────────────────────────────────────────────────
+# Nuvem residual produz pico de NDVI em UMA cena isolada; macrófita não
+# desaparece em cinco dias. Exigir que duas observações qualificadas
+# consecutivas ultrapassem o limiar rejeita o primeiro caso sem descartar
+# nenhuma imagem do histórico -- que é o ponto: o filtro de ingestão continua
+# em 1% e todas as passagens seguem registradas e visíveis no painel.
+#
+# Medido sobre a série 2016-2026: alertas anteriores ao surto caem de 31 para
+# 5, mantendo 17 das 29 detecções durante o evento confirmado.
+ALERT_REQUIRE_PERSISTENCE = True
+
 # Pixels dentro do polígono (não da bounding box). Ver artigo, Seção 2.2.
 # Para recalibrar: rode com MIN_VALID_FRACTION=0.001, colete os maiores
 # valores de valid_px em datas visivelmente sem nuvem e use o maior.
@@ -100,6 +126,7 @@ SH_TOKEN_URL   = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/prot
 SH_STATS_URL   = "https://sh.dataspace.copernicus.eu/api/v1/statistics"
 SH_PROCESS_URL = "https://sh.dataspace.copernicus.eu/api/v1/process"
 PANEL_IMAGE_SIZE = 512
+PANEL_URL = "mauriciorschmitt.github.io/saolourencoalert"  # exibido nas notificações
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 2. EVALSCRIPTS (inalterados — mesma matemática de bandas do artigo)
@@ -502,6 +529,73 @@ def _status(z: float) -> str:
     if z >= ATTENTION_Z:       return "ATENÇÃO"
     return "NORMAL"
 
+# Alias mantido para compatibilidade: backfill_historico.py importava este
+# nome antes da renomeação. Mantido para não quebrar scripts externos.
+_status_from_z = _status
+
+_CONFIDENCE_RANK = {"BAIXA": 0, "MEDIA": 1, "ALTA": 2}
+
+def _confidence(valid_fraction: float) -> str:
+    """Rotula a observação pela fração da AOI efetivamente observada.
+
+    ALTA  -- cena praticamente limpa; comparável à série de referência.
+    MEDIA -- cobertura parcial; usar com ressalva.
+    BAIXA -- média calculada sobre pequena parte do reservatório; indicativa
+             apenas. Nuvem residual não capturada pela máscara SCL tende a
+             elevar o NDVI, então z-scores altos nesta faixa são suspeitos.
+    """
+    vf = float(valid_fraction or 0.0)
+    if vf >= RELIABLE_VALID_FRACTION: return "ALTA"
+    if vf >= USABLE_VALID_FRACTION:   return "MEDIA"
+    return "BAIXA"
+
+def _should_notify(confidence: str) -> bool:
+    return _CONFIDENCE_RANK.get(confidence, 0) >= _CONFIDENCE_RANK.get(
+        NOTIFY_MIN_CONFIDENCE, 0
+    )
+
+def _last_qualified_z(before_date: str) -> Optional[float]:
+    """Z-score da última observação QUALIFICADA anterior a `before_date`.
+
+    Qualificada = confiança suficiente para notificar. Observações de baixa
+    confiança são ignoradas aqui (mas continuam no histórico): uma cena
+    ruim no meio não deve nem confirmar nem quebrar uma sequência.
+    Retorna None se não houver histórico anterior.
+    """
+    if not HISTORY_CSV.exists():
+        return None
+    best_date, best_z = None, None
+    try:
+        with open(HISTORY_CSV, encoding="utf-8", newline="") as fh:
+            for row in csv.DictReader(fh):
+                d = row.get("date") or ""
+                if not d or d >= before_date:
+                    continue
+                conf = row.get("confianca") or _confidence(
+                    float(row.get("valid_fraction") or 0.0)
+                )
+                if not _should_notify(conf):
+                    continue
+                if best_date is None or d > best_date:
+                    best_date, best_z = d, float(row.get("zscore") or 0.0)
+    except (OSError, ValueError, TypeError) as exc:
+        log.warning("Não foi possível ler o histórico para persistência: %s", exc)
+        return None
+    return best_z
+
+def _is_persistent_alert(date_str: str, z: float, confidence: str) -> bool:
+    """True se ESTA observação e a qualificada imediatamente anterior
+    ultrapassarem o limiar de alerta."""
+    if z < ALERT_Z_THRESHOLD or not _should_notify(confidence):
+        return False
+    if not ALERT_REQUIRE_PERSISTENCE:
+        return True
+    prev_z = _last_qualified_z(date_str)
+    if prev_z is None:
+        log.info("Sem observação qualificada anterior: alerta não confirmado.")
+        return False
+    return prev_z >= ALERT_Z_THRESHOLD
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # 9. PERSISTÊNCIA
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -515,7 +609,8 @@ LATEST_JSON      = DATA_DIR / "ultimo.json"
 SCENES_30D_JSON  = DATA_DIR / "passagens_30d.json"
 
 CSV_FIELDS = ["date", "ndvi", "ndwi", "ndmi", "cloud_pct",
-              "valid_fraction", "zscore", "status"]
+              "valid_fraction", "zscore", "status", "confianca",
+              "alerta_confirmado"]
 
 def save_panel_bytes(panel_bytes: Optional[bytes], date_str: str,
                      is_best: bool = False) -> None:
@@ -538,7 +633,9 @@ def save_all(scenes: list[dict], best: dict, z: float, run_id: str) -> dict:
     LATEST_IMG_DIR.mkdir(parents=True, exist_ok=True)
     ARCHIVE_IMG_DIR.mkdir(parents=True, exist_ok=True)
 
-    status = _status(z)
+    status     = _status(z)
+    confianca  = _confidence(best["valid_fraction"])
+    persistente = _is_persistent_alert(best["date"], z, confianca)
 
     # ── ultimo.json (estado mais recente — melhor cena) ─────────────────────
     payload = {
@@ -553,6 +650,25 @@ def save_all(scenes: list[dict], best: dict, z: float, run_id: str) -> dict:
         "valid_fraction": best["valid_fraction"],
         "zscore":         round(z, 4),
         "status":         status,
+        "confianca":      confianca,
+        "confianca_limiares": {
+            "alta":  RELIABLE_VALID_FRACTION,
+            "media": USABLE_VALID_FRACTION,
+        },
+        "confianca_nota": (
+            "Rótulo derivado da fração da área do reservatório efetivamente "
+            "observada. Em cenas de confiança BAIXA a média é calculada sobre "
+            "uma pequena parte da represa e nuvem residual tende a elevar o "
+            "NDVI: o valor é indicativo, não comparável à série de referência."
+        ),
+        "alerta_confirmado": "SIM" if persistente else "NAO",
+        "persistencia_exigida": ALERT_REQUIRE_PERSISTENCE,
+        "persistencia_nota": (
+            "Alerta só é confirmado quando duas observações qualificadas "
+            "consecutivas ultrapassam o limiar. Pico isolado de NDVI é "
+            "sinal típico de nuvem residual, não de expansão de vegetação."
+        ),
+        "notificado": _should_notify(confianca),
         "cloud_threshold": CLOUD_THRESHOLD,
         "cloud_note": (
             "Cobertura estimada pela máscara SCL na área de estudo; "
@@ -587,6 +703,7 @@ def save_all(scenes: list[dict], best: dict, z: float, run_id: str) -> dict:
             **sc,
             "zscore": round(sz, 4),
             "status": _status(sz),
+            "confianca": _confidence(sc.get("valid_fraction", 0.0)),
             # informa ao painel se a imagem de arquivo já existe
             "has_image": (ARCHIVE_IMG_DIR / sc["date"] / "panel.png").exists(),
         })
@@ -783,10 +900,13 @@ def main():
             save_panel_bytes(panel, sc["date"], is_best=False)
 
     # Persiste todos os dados (atualiza has_image depois de gerar imagens)
-    payload = save_all(scenes, best, z, run_id)
-    status  = payload["status"]
+    payload    = save_all(scenes, best, z, run_id)
+    status     = payload["status"]
+    confianca  = payload["confianca"]
+    confirmado = payload["alerta_confirmado"] == "SIM"
 
     emoji = {"ALERTA": "🚨", "ATENÇÃO": "⚠️", "NORMAL": "✅"}.get(status, "ℹ️")
+    selo  = {"ALTA": "🟢", "MEDIA": "🟡", "BAIXA": "🔴"}.get(confianca, "")
     n_cenas = len(scenes)
     message = (
         f"🛰️ Monitoramento São Lourenço\n"
@@ -795,22 +915,50 @@ def main():
         f"💧 NDWI:    {best['ndwi']:.3f}\n"
         f"🌱 NDMI:    {best['ndmi']:.3f}\n"
         f"☁️ Nuvens:  {best['cloud_pct']:.1f}%\n"
+        f"👁️ Área observada: {best['valid_fraction'] * 100:.1f}%\n"
         f"📊 Z-score: {z:.2f}\n"
         f"{emoji} Status: {status}\n"
+        f"{selo} Confiança: {confianca}\n"
         f"🔍 Passagens no período: {n_cenas} "
-        f"(veja todas em saolourenco.netlify.app)\n"
+        f"(veja todas em {PANEL_URL})\n"
     )
-    if best["cloud_pct"] > CLOUD_THRESHOLD:
-        message += "☁️ Obs: cobertura > 10%; imagem mantida no histórico.\n"
-    if is_alert:
-        message += "⚠️ Anomalia estatística detectada — recomenda-se verificação de campo.\n"
+    if confianca != "ALTA":
+        message += (
+            f"⚠️ Leitura obtida sobre {best['valid_fraction'] * 100:.0f}% da represa. "
+            f"Nuvem residual tende a elevar o NDVI — valor indicativo.\n"
+        )
+    if is_alert and confirmado:
+        message += (
+            "⚠️ Anomalia CONFIRMADA em duas passagens consecutivas — "
+            "recomenda-se verificação de campo.\n"
+        )
+    elif is_alert:
+        message += (
+            "🔎 Anomalia detectada nesta passagem, ainda NÃO confirmada: "
+            "a observação qualificada anterior estava dentro do normal. "
+            "Aguardando a próxima passagem para confirmar ou descartar.\n"
+        )
 
     log.info("Mensagem composta:\n%s", message)
-    send_telegram(message, image_bytes=best_panel)
-    send_email(f"Monitoramento São Lourenço – {status}", message, image_bytes=best_panel)
-    send_whatsapp(message)
 
-    log.info("=== Execução concluída  run_id=%s  status=%s ===", run_id, status)
+    # Observações de baixa confiança continuam gravadas e visíveis no painel,
+    # mas não disparam push: alerta falso recorrente faz o destinatário parar
+    # de olhar os alertas verdadeiros.
+    if _should_notify(confianca):
+        log.info("Alerta confirmado por persistência: %s", confirmado)
+        send_telegram(message, image_bytes=best_panel)
+        send_email(f"Monitoramento São Lourenço – {status}", message,
+                   image_bytes=best_panel)
+        send_whatsapp(message)
+    else:
+        log.info(
+            "Notificação suprimida: confiança %s abaixo do corte %s "
+            "(área observada %.1f%%). Dados gravados normalmente.",
+            confianca, NOTIFY_MIN_CONFIDENCE, best["valid_fraction"] * 100,
+        )
+
+    log.info("=== Execução concluída  run_id=%s  status=%s  confiança=%s  "
+             "confirmado=%s ===", run_id, status, confianca, confirmado)
 
 
 if __name__ == "__main__":
