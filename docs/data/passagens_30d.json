@@ -1,7 +1,7 @@
 {
   "schema_version": "3.0",
-  "run_id": "4f8df9a9-595f-4f7c-bdb0-327e2349c0ca",
-  "updated_at": "2026-09-17T14:06:03.293610+00:00",
+  "run_id": "113ff713-a557-4c7f-83e1-8bea03054b13",
+  "updated_at": "2026-09-18T23:36:51.349531+00:00",
   "lookback_days": 30,
   "scenes": [
     {
@@ -14,6 +14,7 @@
       "best": false,
       "zscore": 2.0619,
       "status": "ALERTA",
+      "confianca": "BAIXA",
       "has_image": true
     },
     {
@@ -26,6 +27,7 @@
       "best": true,
       "zscore": 0.7088,
       "status": "NORMAL",
+      "confianca": "MEDIA",
       "has_image": true
     },
     {
@@ -38,6 +40,20 @@
       "best": false,
       "zscore": -3.0841,
       "status": "NORMAL",
+      "confianca": "BAIXA",
+      "has_image": true
+    },
+    {
+      "date": "2026-09-17",
+      "ndvi": -0.22808709479947872,
+      "ndwi": 0.305901732988507,
+      "ndmi": 0.1347074132183773,
+      "cloud_pct": 83.4,
+      "valid_fraction": 0.1656,
+      "best": false,
+      "zscore": -3.7772,
+      "status": "NORMAL",
+      "confianca": "BAIXA",
       "has_image": true
     }
   ]

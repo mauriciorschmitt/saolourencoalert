@@ -1,7 +1,7 @@
 {
   "schema_version": "3.0",
-  "run_id": "4f8df9a9-595f-4f7c-bdb0-327e2349c0ca",
-  "updated_at": "2026-09-17T14:06:03.293610+00:00",
+  "run_id": "113ff713-a557-4c7f-83e1-8bea03054b13",
+  "updated_at": "2026-09-18T23:36:51.349531+00:00",
   "date": "2026-08-28",
   "ndvi": 0.10408534604039889,
   "ndwi": 0.0098686547104204,
@@ -10,6 +10,16 @@
   "valid_fraction": 0.686,
   "zscore": 0.7088,
   "status": "NORMAL",
+  "confianca": "MEDIA",
+  "confianca_limiares": {
+    "alta": 0.7,
+    "media": 0.3
+  },
+  "confianca_nota": "Rótulo derivado da fração da área do reservatório efetivamente observada. Em cenas de confiança BAIXA a média é calculada sobre uma pequena parte da represa e nuvem residual tende a elevar o NDVI: o valor é indicativo, não comparável à série de referência.",
+  "alerta_confirmado": "NAO",
+  "persistencia_exigida": true,
+  "persistencia_nota": "Alerta só é confirmado quando duas observações qualificadas consecutivas ultrapassam o limiar. Pico isolado de NDVI é sinal típico de nuvem residual, não de expansão de vegetação.",
+  "notificado": true,
   "cloud_threshold": 10,
   "cloud_note": "Cobertura estimada pela máscara SCL na área de estudo; 10% é apenas referência e não bloqueia o envio."
 }
