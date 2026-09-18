@@ -45,9 +45,14 @@ from monitor_ndvi import (
     get_access_token,
     reproject_to_utm,
     check_anomaly,
-    _status_from_z,
+    _status,
+    _confidence,
+    _should_notify,
+    ALERT_Z_THRESHOLD,
+    ALERT_REQUIRE_PERSISTENCE,
     DATA_DIR,
     HISTORY_CSV,
+    CSV_FIELDS,
 )
 import requests
 
@@ -170,7 +175,9 @@ def main():
 
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    fields = ["date", "ndvi", "ndwi", "ndmi", "cloud_pct", "valid_fraction", "zscore", "status"]
+    # Usa a mesma lista do monitor: uma única definição do formato do CSV,
+    # para que backfill e execução semanal nunca divirjam de colunas.
+    fields = CSV_FIELDS
 
     # merge with whatever is already in historico.csv (e.g. rows written by
     # normal weekly runs since this backfill's --until date), keyed by date
@@ -183,7 +190,6 @@ def main():
 
     for result in all_results:
         z, _ = check_anomaly(result["date"], result["ndvi"])
-        status = _status_from_z(z)
         by_date[result["date"]] = {
             "date": result["date"],
             "ndvi": result["ndvi"],
@@ -192,16 +198,61 @@ def main():
             "cloud_pct": result["cloud_pct"],
             "valid_fraction": result["valid_fraction"],
             "zscore": z,
-            "status": status,
+            "status": _status(z),
+            "confianca": _confidence(result["valid_fraction"]),
         }
 
+    # Persistência: percorre a série em ordem e confirma o alerta apenas
+    # quando duas observações QUALIFICADAS consecutivas ultrapassam o limiar.
+    # Observações de baixa confiança são puladas (não confirmam nem quebram
+    # a sequência) mas permanecem no arquivo.
+    prev_qualified_z = None
+    for date_key in sorted(by_date):
+        row = by_date[date_key]
+        try:
+            zz = float(row.get("zscore") or 0.0)
+            conf = row.get("confianca") or _confidence(
+                float(row.get("valid_fraction") or 0.0))
+        except (TypeError, ValueError):
+            row["alerta_confirmado"] = ""
+            continue
+        if not _should_notify(conf):
+            row["alerta_confirmado"] = "NAO"
+            continue
+        confirmado = (
+            zz >= ALERT_Z_THRESHOLD
+            and (not ALERT_REQUIRE_PERSISTENCE
+                 or (prev_qualified_z is not None
+                     and prev_qualified_z >= ALERT_Z_THRESHOLD))
+        )
+        row["alerta_confirmado"] = "SIM" if confirmado else "NAO"
+        prev_qualified_z = zz
+
     with open(HISTORY_CSV, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fields)
+        writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         for date_key in sorted(by_date):
-            writer.writerow(by_date[date_key])
+            row = by_date[date_key]
+            # Linhas herdadas de versões anteriores do CSV não têm a coluna
+            # de confiança nem, necessariamente, status coerente com a regra
+            # unilateral atual: recalcula ambos a partir dos dados brutos.
+            if not row.get("confianca"):
+                try:
+                    vf = float(row.get("valid_fraction") or 0.0)
+                    zz = float(row.get("zscore") or 0.0)
+                    row["confianca"] = _confidence(vf)
+                    row["status"] = _status(zz)
+                except (TypeError, ValueError):
+                    row.setdefault("confianca", "")
+            writer.writerow(row)
 
+    n_alta = sum(1 for r in by_date.values() if r.get("confianca") == "ALTA")
+    n_baixa = sum(1 for r in by_date.values() if r.get("confianca") == "BAIXA")
     print(f"Done. {len(by_date)} total rows written to {HISTORY_CSV}")
+    n_conf = sum(1 for r in by_date.values() if r.get("alerta_confirmado") == "SIM")
+    print(f"  confiança ALTA: {n_alta} | BAIXA: {n_baixa} "
+          f"(ver RELIABLE_VALID_FRACTION / USABLE_VALID_FRACTION)")
+    print(f"  alertas confirmados por persistência: {n_conf}")
     print(
         "Note: docs/data/ultimo.json and the latest image panel were NOT "
         "touched by this script -- run the normal monitor_ndvi.py once "
