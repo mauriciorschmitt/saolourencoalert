@@ -1,0 +1,58 @@
+name: Apurar números para documentação (manual)
+
+# Roda só quando você clicar em "Run workflow" na aba Actions.
+# Imprime no log os números necessários para preencher a Ficha de PTT e o
+# Relatório, e salva o mesmo conteúdo como artefato para download.
+#
+# Não altera nenhum arquivo do repositório: é somente leitura.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read        # necessário para contar as execuções dos workflows
+
+jobs:
+  apurar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependências
+        run: pip install requests
+
+      - name: Apurar números
+        env:
+          # Token injetado automaticamente pelo Actions — funciona também
+          # em repositório privado, sem precisar criar nada à mão.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python apurar_numeros.py --repo "${{ github.repository }}" \
+            | tee numeros_apurados.txt
+
+      - name: Publicar resumo na página da execução
+        if: always()
+        run: |
+          {
+            echo '## Números apurados'
+            echo ''
+            echo '```'
+            cat numeros_apurados.txt 2>/dev/null || echo "(sem saída)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Salvar como arquivo para download
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: numeros-apurados
+          path: numeros_apurados.txt
+          if-no-files-found: warn
+          retention-days: 90
