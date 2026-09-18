@@ -73,6 +73,19 @@ a{color:var(--accent)}
 .pill-warn{background:var(--warn-bg);color:var(--warn)}
 .pill-alert{background:var(--alert-bg);color:var(--alert)}
 .status-date{font-size:13px;color:var(--muted);margin-top:6px}
+/* ── selo de confiabilidade da leitura ───────────────────────────────────── */
+.conf-pill{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 11px;font-size:12px;font-weight:600;margin-top:8px;border:1px solid transparent}
+.conf-alta{background:#e6f4ea;color:#1e6b34;border-color:#b7e0c4}
+.conf-media{background:#fff4e0;color:#8a5a00;border-color:#f2d9a5}
+.conf-baixa{background:#fdeaea;color:#a12626;border-color:#f3c0c0}
+.conf-banner{display:flex;gap:10px;align-items:flex-start;border-radius:10px;padding:12px 14px;margin-top:16px;font-size:13.5px;line-height:1.5}
+.conf-banner.media{background:#fff8ec;border:1px solid #f2d9a5;color:#7a4f00}
+.conf-banner.baixa{background:#fdf0f0;border:1px solid #f3c0c0;color:#8f2020}
+.conf-banner b{font-weight:700}
+.conf-icon{font-size:17px;line-height:1.3}
+.confirm-tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;border-radius:6px;padding:2px 8px;margin-top:6px;text-transform:uppercase}
+.confirm-sim{background:#fdeaea;color:#a12626}
+.confirm-nao{background:#eef1f5;color:#5a6472}
 /* ── métricas ────────────────────────────────────────────────────────────── */
 .card-title{font-size:16px;font-weight:700;margin-bottom:14px;color:var(--text)}
 .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
@@ -308,6 +321,54 @@ function statusClass(s) {
 function pillClass(s) {
   return 'pill-' + statusClass(s);
 }
+// ── confiabilidade da leitura ───────────────────────────────────────────────
+// A ingestão é deliberadamente permissiva: TODAS as passagens entram no
+// histórico. Mas uma média calculada sobre 5% da represa não é comparável a
+// uma calculada sobre 100%, então rotulamos e avisamos.
+const CONF = {
+  ALTA:  {cls:'conf-alta',  icon:'🟢', rotulo:'Leitura confiável'},
+  MEDIA: {cls:'conf-media', icon:'🟡', rotulo:'Leitura parcial'},
+  BAIXA: {cls:'conf-baixa', icon:'🔴', rotulo:'Leitura pouco confiável'}
+};
+function confKey(latest) {
+  if (latest && latest.confianca) return String(latest.confianca).toUpperCase();
+  // fallback para dados gravados antes da coluna existir
+  const vf = Number(latest && latest.valid_fraction);
+  if (!Number.isFinite(vf)) return 'BAIXA';
+  if (vf >= 0.70) return 'ALTA';
+  if (vf >= 0.30) return 'MEDIA';
+  return 'BAIXA';
+}
+function confMeta(latest) {
+  return CONF[confKey(latest)] || CONF.BAIXA;
+}
+function confBanner(latest) {
+  const k = confKey(latest);
+  if (k === 'ALTA') return '';
+  const pct = fmt(Number(latest.valid_fraction) * 100, 0);
+  const txt = k === 'BAIXA'
+    ? `Esta leitura foi calculada sobre apenas <b>${pct}% da área do reservatório</b> — o restante estava encoberto por nuvem ou sombra. Nuvem residual tende a <b>elevar artificialmente o NDVI</b>, então um valor alto aqui não indica necessariamente expansão de vegetação. Trate como indicativo e aguarde uma passagem com céu limpo.`
+    : `Esta leitura cobriu <b>${pct}% da área do reservatório</b>. O valor é utilizável, mas menos comparável à série histórica que uma cena sem nuvens.`;
+  return `<div class="conf-banner ${k.toLowerCase()}">
+            <span class="conf-icon">${k === 'BAIXA' ? '⚠️' : 'ℹ️'}</span>
+            <span>${txt}</span>
+          </div>`;
+}
+
+// Alerta confirmado = duas passagens qualificadas consecutivas acima do
+// limiar. Pico isolado é sinal típico de nuvem residual.
+function confirmTag(latest) {
+  if (!latest || latest.status !== 'ALERTA') return '';
+  const ok = String(latest.alerta_confirmado || '').toUpperCase() === 'SIM';
+  return ok
+    ? `<span class="confirm-tag confirm-sim"
+             title="Duas passagens consecutivas acima do limiar">
+         ✓ confirmado em 2 passagens</span>`
+    : `<span class="confirm-tag confirm-nao"
+             title="A passagem qualificada anterior estava dentro do normal">
+         aguardando confirmação</span>`;
+}
+
 function cloudClass(pct) {
   const p = Number(pct);
   if (p >= 50) return 'cloud-alert';
@@ -366,6 +427,11 @@ function render() {
           ${s === 'ALERTA' ? '🔴' : s === 'ATENÇÃO' ? '🟡' : '🟢'} ${esc(s)}
         </div>
         <span class="status-pill ${pillClass(s)}">${esc(s)}</span>
+        <span class="conf-pill ${confMeta(latest).cls}"
+              title="Fração da área do reservatório efetivamente observada nesta cena">
+          ${confMeta(latest).icon} ${confMeta(latest).rotulo}
+        </span>
+        ${confirmTag(latest)}
         <div class="status-date">Imagem de <b>${esc(latest.date || '—')}</b></div>
         <div class="status-date" style="font-size:12px">Atualizado: ${updatedAt}</div>
       </div>
@@ -392,11 +458,13 @@ function render() {
         </div>
 
         <div class="meta-row">
-          <span>Pixels válidos: <b>${fmt(Number(latest.valid_fraction) * 100, 1)}%</b></span>
+          <span>Área observada: <b>${fmt(Number(latest.valid_fraction) * 100, 1)}%</b></span>
           <span class="cloud-chip ${cloudClass(cloudPct)}">
             ☁️ ${fmt(cloudPct, 1)}% de nuvens
           </span>
         </div>
+
+        ${confBanner(latest)}
 
         <details class="legend">
           <summary>O que significa cada indicador?</summary>
