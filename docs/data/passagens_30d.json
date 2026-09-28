@@ -1,22 +1,9 @@
 {
   "schema_version": "3.0",
-  "run_id": "a40076e9-5722-4a2c-af29-d6bebb9207ee",
-  "updated_at": "2026-09-24T14:00:31.646884+00:00",
+  "run_id": "4d1383ee-f940-48b0-bcb6-d63888584487",
+  "updated_at": "2026-09-28T17:20:17.922311+00:00",
   "lookback_days": 30,
   "scenes": [
-    {
-      "date": "2026-08-28",
-      "ndvi": 0.10408534604039889,
-      "ndwi": 0.0098686547104204,
-      "ndmi": 0.05132222662512494,
-      "cloud_pct": 31.4,
-      "valid_fraction": 0.686,
-      "best": true,
-      "zscore": 0.7088,
-      "status": "NORMAL",
-      "confianca": "MEDIA",
-      "has_image": true
-    },
     {
       "date": "2026-09-15",
       "ndvi": -0.1765316881192685,
@@ -24,7 +11,7 @@
       "ndmi": 0.12457939853528159,
       "cloud_pct": 75.4,
       "valid_fraction": 0.246,
-      "best": false,
+      "best": true,
       "zscore": -3.0841,
       "status": "NORMAL",
       "confianca": "BAIXA",
