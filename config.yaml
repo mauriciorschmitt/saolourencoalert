@@ -101,6 +101,15 @@ indices:
 # ── Classificação por pixel ────────────────────────────────────────────────
 # Além da média, o sistema conta pixels que cruzam um limiar. É isso que
 # converte índice em área: hectares de água, hectares de cobertura flutuante.
+#
+# ATENÇÃO: diferentemente do z-score, estes limiares são ABSOLUTOS — não se
+# ajustam ao comportamento histórico da represa. São, portanto, os
+# parâmetros que mais precisam de calibração. O evento de 2025, com imagens
+# de alta resolução disponíveis para conferência, é o padrão-ouro para isso.
+#
+# Na série atual, anos sem evento produzem de 3,6 a 7,7 ha de "cobertura
+# flutuante", valor que provavelmente reflete pixels de borda e não
+# macrófita. Reduzir esse piso é o principal ganho de calibração.
 classificacao:
   agua:
     indice: "ndwi"
@@ -153,12 +162,54 @@ climatologia:
   n_minimo_por_mes: 5      # abaixo disso o mês é marcado como pouco confiável
   estimador: "media_dp"    # alternativa: "mediana_mad" (robusto)
 
-# ── Alerta ─────────────────────────────────────────────────────────────────
+# ── Alerta em dois níveis ──────────────────────────────────────────────────
+# Separa ANTECIPAR de CONFIRMAR, porque exigem evidências diferentes e
+# levam a ações diferentes: vigilância move uma ida a campo, alerta
+# confirmado move uma resposta.
 alerta:
-  # Exige ultrapassagem do limiar em duas observações qualificadas
-  # consecutivas. Pico de cena única é assinatura típica de nuvem residual.
+  # Pico de cena única é assinatura típica de nuvem residual, não de
+  # alteração ambiental. Vale para ambos os níveis.
   exigir_persistencia: true
-  # Índices que, disparando juntos na mesma data, elevam a prioridade.
+
+  # ── Nível 1 · VIGILÂNCIA (antecipação) ──────────────────────────────────
+  # Fundamento empírico: em 12/02/2025 a clorofila atingiu z = 5,1 com a
+  # cobertura ainda em 10 ha, dentro da faixa normal. A área só cruzou o
+  # limiar em 18/04 — 65 dias depois — e o pico veio em setembro.
+  #
+  # RESSALVA, e ela é importante: isso é UMA ocorrência. Na mesma série, a
+  # clorofila disparou outras cinco vezes sem que surto algum se seguisse.
+  # O valor preditivo observado é de cerca de 1 em 6. Trate como hipótese
+  # a testar prospectivamente, não como preditor validado, e registre o
+  # desfecho de cada disparo para construir essa validação ao longo do tempo.
+  vigilancia:
+    ativa: true
+    indice_precursor: "ndci"
+    z_minimo: 2.0
+    # Só faz sentido antecipar enquanto o fenômeno ainda não é visível:
+    # acima desta cobertura a situação já é de detecção, não de antecipação.
+    cobertura_maxima_ha: 30.0
+    confianca_minima: "ALTA"
+    rotulo: "Vigilância — condição atípica"
+    mensagem: >-
+      Clorofila acima do padrão histórico do mês, com cobertura ainda
+      dentro do normal. Condição que precedeu o evento de 2025 em cerca de
+      dois meses. Recomenda-se verificação de campo nas próximas semanas.
+
+  # ── Nível 2 · ALERTA CONFIRMADO (detecção) ──────────────────────────────
+  # Exigir concordância entre índices reduz drasticamente o ruído: o NDVI
+  # sozinho produz 76 alertas na série; três índices concordando em cena de
+  # alta confiança produzem 14, dos quais 13 pertencem ao evento real.
+  confirmado:
+    indices_minimos: 3
+    entre: ["ndvi", "fai", "ndci", "ndti"]
+    confianca_minima: "ALTA"
+    rotulo: "Alerta confirmado"
+    mensagem: >-
+      Múltiplos indicadores independentes acima do padrão histórico na
+      mesma passagem, em cena sem cobertura de nuvens. Recomenda-se
+      verificação de campo e registro fotográfico.
+
+  # Rótulos descritivos para combinações de índices, usados na interface.
   combinacoes_relevantes:
     - indices: ["ndvi", "fai"]
       rotulo: "Expansão de vegetação flutuante"
