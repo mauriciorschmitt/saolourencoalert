@@ -1,0 +1,4 @@
+# O painel é público; a página de registro de observações de campo é de uso
+# interno da equipe do projeto e não se destina a receber relatos do público.
+User-agent: *
+Disallow: /campo.html
