@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Registrar observação de campo — Represa São Lourenço</title>
+<!-- Página de uso interno da equipe do projeto. Não é alcançável por
+     navegação a partir do painel e não deve ser indexada: não se destina a
+     receber relatos do público. O controle efetivo de quem pode registrar
+     está no workflow registrar_campo.yml, que só aceita issues de quem tem
+     acesso de escrita ao repositório. -->
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="googlebot" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:wght@300;400;600&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ground:#EDF0EF; --panel:#FFFFFF; --ink:#12303A; --muted:#5E747C;
+  --line:#D2DBD9; --water:#2A6B8C; --algae:#6E9435; --silt:#A8762F;
+  --alert:#A8432A;
+  --serif:'Spectral',Georgia,serif; --sans:'Archivo','Segoe UI',system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{--ground:#0E1C21; --panel:#132930; --ink:#E4ECEA; --muted:#8EA6AC;
+        --line:#26414A; --water:#5AA3C4; --algae:#9BC25C; --silt:#D2A45C;
+        --alert:#E0795A;}
+}
+*{box-sizing:border-box}
+html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);
+     font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:620px;margin:0 auto;padding:24px 18px 60px}
+a{color:var(--water)}
+.voltar{font-size:14px;display:inline-block;margin-bottom:18px}
+.restrito{font-size:12px;color:var(--muted);border:1px solid var(--line);
+  border-radius:2px;padding:3px 9px;display:inline-block;margin:0 0 10px}
+h1{font-family:var(--serif);font-weight:400;font-size:30px;margin:0 0 6px}
+.sub{color:var(--muted);font-size:14px;margin:0 0 26px}
+
+fieldset{border:none;padding:0;margin:0 0 22px}
+legend{font-size:13px;color:var(--muted);margin-bottom:8px;padding:0}
+label{display:block;font-size:13px;color:var(--muted);margin:0 0 5px}
+input,select,textarea{width:100%;font-family:inherit;font-size:16px;
+  padding:11px 12px;border:1px solid var(--line);border-radius:3px;
+  background:var(--panel);color:var(--ink)}
+textarea{resize:vertical;min-height:70px}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--water);
+  outline-offset:1px;border-color:var(--water)}
+.dupla{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+/* categorias como cartões tocáveis */
+.cats{display:grid;gap:9px}
+.cat{display:flex;align-items:flex-start;gap:11px;padding:12px 14px;
+  border:1px solid var(--line);border-radius:3px;background:var(--panel);
+  cursor:pointer}
+.cat input{width:auto;margin:3px 0 0;flex:none}
+.cat b{display:block;font-size:15px;font-weight:600}
+.cat span{font-size:13px;color:var(--muted)}
+.cat:has(input:checked){border-color:var(--water);
+  box-shadow:inset 0 0 0 1px var(--water)}
+
+/* localização */
+.geo{background:var(--panel);border:1px solid var(--line);border-radius:3px;
+  padding:14px}
+.geo-estado{font-size:13.5px;color:var(--muted);margin:10px 0 0}
+.geo-ok{color:var(--algae)} .geo-erro{color:var(--alert)}
+button{font-family:inherit;font-size:15px;font-weight:500;padding:11px 16px;
+  border-radius:3px;cursor:pointer;border:1px solid var(--water);
+  background:var(--panel);color:var(--water);width:100%}
+button:hover{background:var(--water);color:var(--panel)}
+button.principal{background:var(--water);color:#fff;font-size:16px;padding:14px}
+button.principal:hover{filter:brightness(1.1)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.nota{font-size:13px;color:var(--muted);margin-top:12px}
+.passos{background:var(--panel);border-left:3px solid var(--silt);
+  padding:12px 14px;font-size:13.5px;color:var(--muted);margin:22px 0}
+.passos ol{margin:6px 0 0;padding-left:20px} .passos li{margin-bottom:5px}
+.erro{color:var(--alert);font-size:14px;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="voltar" href="./">← Voltar ao painel</a>
+  <p class="restrito">Uso interno da equipe do projeto</p>
+  <h1>Observação de campo</h1>
+  <p class="sub">Preencha aqui, na margem da represa. A localização vem do
+    aparelho e as fotos você anexa no passo seguinte.</p>
+
+  <fieldset>
+    <legend>Quando</legend>
+    <div class="dupla">
+      <div><label for="data">Data</label><input type="date" id="data"></div>
+      <div><label for="hora">Hora</label><input type="time" id="hora"></div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Onde</legend>
+    <label for="ponto">Ponto de observação</label>
+    <input type="text" id="ponto" list="pontos" placeholder="ex.: barragem"
+           autocomplete="off">
+    <datalist id="pontos">
+      <option value="barragem"><option value="braco-norte">
+      <option value="braco-sul"><option value="margem-leste">
+    </datalist>
+    <p class="nota">Use sempre o mesmo nome para o mesmo lugar — é o que
+      permite comparar o local ao longo do tempo.</p>
+
+    <div class="geo" style="margin-top:14px">
+      <button type="button" id="btn-geo">Usar minha localização</button>
+      <p class="geo-estado" id="geo-estado">A localização é lida do GPS do
+        aparelho e não sai daqui até você enviar.</p>
+      <div class="dupla" style="margin-top:10px">
+        <div><label for="lat">Latitude</label>
+          <input type="text" id="lat" inputmode="decimal" placeholder="—"></div>
+        <div><label for="lon">Longitude</label>
+          <input type="text" id="lon" inputmode="decimal" placeholder="—"></div>
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>O que você viu</legend>
+    <div class="cats">
+      <label class="cat"><input type="radio" name="cob" value="AUSENTE">
+        <span><b>Ausente</b><span>Nenhuma macrófita visível na água</span></span></label>
+      <label class="cat"><input type="radio" name="cob" value="ISOLADA">
+        <span><b>Isolada</b><span>Manchas pequenas e dispersas, água aberta predomina</span></span></label>
+      <label class="cat"><input type="radio" name="cob" value="MODERADA">
+        <span><b>Moderada</b><span>Manchas extensas, ainda há bastante água livre</span></span></label>
+      <label class="cat"><input type="radio" name="cob" value="EXTENSA">
+        <span><b>Extensa</b><span>Macrófita predomina no campo de visão</span></span></label>
+    </div>
+    <p class="nota">Registrar <b>ausente</b> é tão útil quanto confirmar um
+      alerta: sem observações de normalidade não há como medir falso positivo.</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Complementos</legend>
+    <div class="dupla">
+      <div><label for="especie">Espécie</label>
+        <input type="text" id="especie" placeholder="indeterminada"></div>
+      <div><label for="metodo">Método</label>
+        <select id="metodo">
+          <option value="margem">da margem</option>
+          <option value="barco">de barco</option>
+          <option value="drone">com drone</option>
+          <option value="outro">outro</option>
+        </select></div>
+    </div>
+    <label for="observador" style="margin-top:12px">Observador</label>
+    <input type="text" id="observador" placeholder="iniciais">
+    <label for="notas" style="margin-top:12px">Notas</label>
+    <textarea id="notas" placeholder="o que chamou atenção"></textarea>
+  </fieldset>
+
+  <button class="principal" id="enviar">Revisar e enviar</button>
+  <p class="erro" id="erro" hidden></p>
+
+  <div class="passos">
+    O envio abre uma página do GitHub já preenchida. Lá você:
+    <ol>
+      <li>anexa as fotos, arrastando ou pelo botão de imagem;</li>
+      <li>confere os dados;</li>
+      <li>toca em <b>Create</b>.</li>
+    </ol>
+    A observação entra no sistema automaticamente em alguns minutos, e a
+    validação é recalculada no monitoramento seguinte.
+  </div>
+</div>
+
+<script>
+const REPO = 'mauriciorschmitt/saolourencoalert';
+
+// Data e hora de agora, já preenchidas: na margem ninguém quer digitar isso.
+const agora = new Date();
+const p2 = n => String(n).padStart(2,'0');
+document.getElementById('data').value =
+  `${agora.getFullYear()}-${p2(agora.getMonth()+1)}-${p2(agora.getDate())}`;
+document.getElementById('hora').value = `${p2(agora.getHours())}:${p2(agora.getMinutes())}`;
+
+// Lembra o último ponto e observador — quem registra costuma ser sempre o
+// mesmo, nos mesmos lugares.
+try{
+  const ult = JSON.parse(localStorage.getItem('campo_ultimo') || '{}');
+  if(ult.ponto) document.getElementById('ponto').value = ult.ponto;
+  if(ult.observador) document.getElementById('observador').value = ult.observador;
+}catch(e){}
+
+const estado = document.getElementById('geo-estado');
+document.getElementById('btn-geo').onclick = () => {
+  if(!navigator.geolocation){
+    estado.textContent = 'Este navegador não informa localização. Digite as coordenadas à mão.';
+    estado.className = 'geo-estado geo-erro';
+    return;
+  }
+  estado.textContent = 'Obtendo posição…';
+  estado.className = 'geo-estado';
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      document.getElementById('lat').value = pos.coords.latitude.toFixed(6);
+      document.getElementById('lon').value = pos.coords.longitude.toFixed(6);
+      const m = Math.round(pos.coords.accuracy);
+      estado.textContent = `Posição obtida, precisão de cerca de ${m} m.`;
+      estado.className = 'geo-estado geo-ok';
+    },
+    err => {
+      const motivo = err.code === 1
+        ? 'permissão negada — autorize a localização para este site'
+        : err.code === 3 ? 'o aparelho demorou a responder' : 'posição indisponível';
+      estado.textContent = `Não foi possível obter: ${motivo}. Digite as coordenadas ou deixe em branco.`;
+      estado.className = 'geo-estado geo-erro';
+    },
+    {enableHighAccuracy:true, timeout:15000, maximumAge:0}
+  );
+};
+
+document.getElementById('enviar').onclick = () => {
+  const v = id => (document.getElementById(id).value || '').trim();
+  const cob = document.querySelector('input[name="cob"]:checked');
+  const erro = document.getElementById('erro');
+
+  if(!cob || !v('data')){
+    erro.textContent = !v('data')
+      ? 'Informe a data da observação.'
+      : 'Escolha o que você viu na água.';
+    erro.hidden = false;
+    return;
+  }
+  erro.hidden = true;
+
+  try{
+    localStorage.setItem('campo_ultimo', JSON.stringify(
+      {ponto:v('ponto'), observador:v('observador')}));
+  }catch(e){}
+
+  // Corpo em pares chave: valor — formato que o workflow lê sem ambiguidade.
+  const corpo = [
+    '### Observação de campo',
+    '',
+    'Confira os dados, anexe as fotos abaixo e toque em Create.',
+    '',
+    '```dados',
+    `data: ${v('data')}`,
+    `hora: ${v('hora')}`,
+    `ponto: ${v('ponto')}`,
+    `latitude: ${v('lat')}`,
+    `longitude: ${v('lon')}`,
+    `cobertura: ${cob.value}`,
+    `especie: ${v('especie')}`,
+    `metodo: ${v('metodo')}`,
+    `observador: ${v('observador')}`,
+    `notas: ${v('notas').replace(/\n/g,' ')}`,
+    '```',
+    '',
+    '### Fotos',
+    '',
+    '_Arraste as imagens para esta área._',
+  ].join('\n');
+
+  const url = `https://github.com/${REPO}/issues/new`
+    + `?title=${encodeURIComponent('[campo] ' + v('data') + ' · ' + (v('ponto')||'sem ponto') + ' · ' + cob.value)}`
+    + `&labels=${encodeURIComponent('observacao-campo')}`
+    + `&body=${encodeURIComponent(corpo)}`;
+  window.open(url, '_blank', 'noopener');
+};
+</script>
+</body>
+</html>
