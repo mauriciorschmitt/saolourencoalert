@@ -1,0 +1,71 @@
+name: Qualidade da água — monitoramento (agendado)
+
+on:
+  schedule:
+    - cron: "40 9 * * 1,4"  # segunda e quinta, 09:40 UTC
+    # 40 min depois do módulo de macrófitas, para não disputarem
+    # o mesmo push. Ver .github/workflows/ndvi_monitor.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publicacao-dados
+  cancel-in-progress: false
+
+jobs:
+  monitorar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # rebase precisa do histórico
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Executar monitoramento
+        env:
+          SH_CLIENT_ID:     ${{ secrets.SH_CLIENT_ID }}
+          SH_CLIENT_SECRET: ${{ secrets.SH_CLIENT_SECRET }}
+        run: python -m src.monitor
+      - name: Publicar séries atualizadas
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/data
+          if git diff --cached --quiet; then
+            echo "Nada mudou — nenhum commit necessário."
+            exit 0
+          fi
+          git commit -m "dados: atualiza séries de monitoramento [skip ci]"
+          # O remoto pode ter avançado enquanto o processamento rodava (um
+          # upload pelo navegador, outro workflow). Rebase e tenta de novo,
+          # em vez de falhar e descartar o trabalho já feito.
+          for tentativa in 1 2 3 4 5; do
+            if git pull --rebase --autostash origin "${GITHUB_REF_NAME}" \
+               && git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "Publicado na tentativa $tentativa."
+              exit 0
+            fi
+            echo "Tentativa $tentativa falhou; aguardando..."
+            sleep $((tentativa * 5))
+          done
+          echo "::error::Não foi possível publicar após 5 tentativas."
+          exit 1
+      - name: Notificar falha
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+            curl -s -X POST \
+              "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              -d "chat_id=${TELEGRAM_CHAT_ID}" \
+              -d "text=[ERRO] Monitoramento da água falhou: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              > /dev/null
+          fi

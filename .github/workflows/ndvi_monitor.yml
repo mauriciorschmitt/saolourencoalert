@@ -2,11 +2,19 @@ name: Monitoramento Ambiental São Lourenço
 
 on:
   schedule:
-    - cron: "0 9 * * 1,4" # segunda e quinta às 09:00 UTC (06:00 horário de Brasília)
+    - cron: "0 9 * * 1,4" # segunda e quinta, 09:00 UTC (06:00 BRT)
+    # O módulo de qualidade da água roda 40 min depois, para que os
+    # dois não disputem o mesmo push. Ver .github/workflows/agua.yml
   workflow_dispatch:        # disparo manual pelo painel do GitHub Actions
 
 permissions:
   contents: write           # necessário para o git push dos dados do painel
+
+concurrency:
+  # Mesma fila do módulo de qualidade da água: um espera o outro terminar
+  # em vez de os dois tentarem publicar ao mesmo tempo.
+  group: publicacao-dados
+  cancel-in-progress: false
 
 jobs:
   monitor:
@@ -18,6 +26,8 @@ jobs:
       # ── 1. Checkout ─────────────────────────────────────────────────────────
       - name: Baixar repositório
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # rebase precisa do histórico
 
       # ── 2. Python ───────────────────────────────────────────────────────────
       - name: Configurar Python 3.11
@@ -67,9 +77,25 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/data docs/images
-          git diff --cached --quiet || \
-            git commit -m "chore: atualiza monitoramento São Lourenço [skip ci]"
-          git push
+          if git diff --cached --quiet; then
+            echo "Nada mudou — nenhum commit necessário."
+            exit 0
+          fi
+          git commit -m "chore: atualiza monitoramento São Lourenço [skip ci]"
+          # O remoto pode ter avançado enquanto o processamento rodava: outro
+          # módulo publicando, ou um envio pela interface web. Rebase e tenta
+          # de novo, em vez de descartar o trabalho já feito.
+          for tentativa in 1 2 3 4 5; do
+            if git pull --rebase --autostash origin "${GITHUB_REF_NAME}" \
+               && git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "Publicado na tentativa $tentativa."
+              exit 0
+            fi
+            echo "Tentativa $tentativa falhou; aguardando..."
+            sleep $((tentativa * 5))
+          done
+          echo "::error::Não foi possível publicar após 5 tentativas."
+          exit 1
 
       # ── 7. Backup do painel como artefato do workflow (30 dias) ─────────────
       # Disponível na aba Actions mesmo em repositório privado ou após rebase.

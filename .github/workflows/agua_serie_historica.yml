@@ -1,0 +1,74 @@
+name: Qualidade da água — construir série histórica (manual)
+
+# Operação pesada e pontual: reconstrói a série completa desde 2016.
+# Não roda por agenda. Use após alterar setores, índices ou limiares.
+
+on:
+  workflow_dispatch:
+    inputs:
+      desde:
+        description: "Data inicial (AAAA-MM-DD)"
+        required: false
+        default: "2016-07-19"
+      ate:
+        description: "Data final — em branco usa hoje"
+        required: false
+        default: ""
+      setor:
+        description: "Setor específico — em branco processa todos"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publicacao-dados
+  cancel-in-progress: false
+
+jobs:
+  construir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # rebase precisa do histórico
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Reconstruir série
+        env:
+          SH_CLIENT_ID:     ${{ secrets.SH_CLIENT_ID }}
+          SH_CLIENT_SECRET: ${{ secrets.SH_CLIENT_SECRET }}
+        run: |
+          ARGS="--desde ${{ inputs.desde }}"
+          [ -n "${{ inputs.ate }}" ]   && ARGS="$ARGS --ate ${{ inputs.ate }}"
+          [ -n "${{ inputs.setor }}" ] && ARGS="$ARGS --setor ${{ inputs.setor }}"
+          python -m src.monitor $ARGS
+      - name: Publicar séries
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/data
+          if git diff --cached --quiet; then
+            echo "Nada mudou — nenhum commit necessário."
+            exit 0
+          fi
+          git commit -m "dados: reconstrói série histórica [skip ci]"
+          # O remoto pode ter avançado enquanto o processamento rodava (um
+          # upload pelo navegador, outro workflow). Rebase e tenta de novo,
+          # em vez de falhar e descartar o trabalho já feito.
+          for tentativa in 1 2 3 4 5; do
+            if git pull --rebase --autostash origin "${GITHUB_REF_NAME}" \
+               && git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "Publicado na tentativa $tentativa."
+              exit 0
+            fi
+            echo "Tentativa $tentativa falhou; aguardando..."
+            sleep $((tentativa * 5))
+          done
+          echo "::error::Não foi possível publicar após 5 tentativas."
+          exit 1
