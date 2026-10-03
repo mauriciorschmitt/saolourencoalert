@@ -607,6 +607,7 @@ ARCHIVE_IMG_DIR  = PROJECT_ROOT / "docs" / "images" / "archive"
 HISTORY_CSV      = DATA_DIR / "historico.csv"
 LATEST_JSON      = DATA_DIR / "ultimo.json"
 SCENES_30D_JSON  = DATA_DIR / "passagens_30d.json"
+IMAGENS_JSON     = DATA_DIR / "imagens.json"   # índice do arquivo de painéis
 
 CSV_FIELDS = ["date", "ndvi", "ndwi", "ndmi", "cloud_pct",
               "valid_fraction", "zscore", "status", "confianca",
@@ -718,6 +719,24 @@ def save_all(scenes: list[dict], best: dict, z: float, run_id: str) -> dict:
         json.dumps(scenes_payload, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     log.info("passagens_30d.json atualizado (%d cenas).", len(enriched))
+
+    # ── imagens.json (índice completo do arquivo de painéis) ────────────────
+    # passagens_30d.json cobre só a janela recente, mas o arquivo de imagens
+    # cresce indefinidamente. Sem este índice, o painel web não tem como
+    # saber quais datas possuem imagem e oferece apenas as últimas semanas.
+    datas_com_painel = sorted(
+        p.parent.name for p in ARCHIVE_IMG_DIR.glob("*/panel.png")
+    )
+    IMAGENS_JSON.write_text(
+        json.dumps({
+            "schema_version": "1.0",
+            "updated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+            "datas": datas_com_painel,
+        }, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    log.info("imagens.json atualizado (%d painéis arquivados).",
+             len(datas_com_painel))
 
     return payload
 
