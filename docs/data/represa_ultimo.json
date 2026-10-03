@@ -34,9 +34,14 @@
     "cdom_z": -0.5461,
     "ndwi_z": 1.3932,
     "ndmi_z": 0.2822,
-    "combinacoes": ""
+    "combinacoes": "",
+    "indices_em_alerta": 0,
+    "indices_concordantes": "",
+    "nivel": "NORMAL",
+    "nivel_confirmado": "",
+    "area_confiavel": "NAO"
   },
-  "atualizado_em": "2026-10-03T12:17:30.521958+00:00",
+  "atualizado_em": "2026-10-03T12:55:31.539121+00:00",
   "ressalvas": [
     "Os índices são relativos e expressos como anomalia frente ao histórico. Sem amostragem de campo, não correspondem a concentrações.",
     "A correção atmosférica utilizada é destinada a superfícies terrestres e introduz incerteza adicional sobre água.",
