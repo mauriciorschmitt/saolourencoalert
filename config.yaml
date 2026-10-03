@@ -1,0 +1,175 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  Monitoramento multiparamétrico da Represa São Lourenço — configuração
+# ═══════════════════════════════════════════════════════════════════════════
+# Tudo que é específico deste reservatório está neste arquivo. O código em
+# src/ é genérico: para monitorar outro corpo d'água, troque os setores e os
+# limiares aqui, sem tocar em Python.
+
+local:
+  nome: "Represa São Lourenço"
+  municipio: "Mafra"
+  uf: "SC"
+  timezone: "America/Sao_Paulo"
+
+# ── Aquisição ──────────────────────────────────────────────────────────────
+aquisicao:
+  colecao: "sentinel-2-l2a"
+  resolucao_m: 10          # B05 e B11 são reamostradas de 20 m pela API
+
+  # Recuo para dentro do polígono, em metros, antes do processamento.
+  # Descarta o anel de pixels que mistura água e margem — onde vegetação
+  # ripária eleva os índices sem que nada tenha ocorrido na lâmina d'água.
+  # Para a Represa São Lourenço: 0 m = 79,49 ha; 10 m = 65,10 ha (um pixel,
+  # polígono íntegro); a partir de 15 m os braços estreitos se desconectam.
+  # ATENÇÃO: alterar este valor muda o que é medido. Reconstrua a série
+  # inteira depois de mexer, ou o histórico fica incomparável com o presente.
+  recuo_borda_m: 10
+  janela_dias: 30          # busca retroativa a cada execução
+  serie_inicio: "2016-07-19"
+  chunk_dias: 90           # tamanho do bloco no backfill
+
+# ── Qualidade da observação ────────────────────────────────────────────────
+# A ingestão é permissiva de propósito: todas as passagens entram no
+# histórico. O que muda conforme a qualidade é o rótulo, o disparo de
+# notificação e a elegibilidade para compor a climatologia.
+qualidade:
+  fracao_minima_ingestao: 0.01    # abaixo disso a cena é descartada
+  fracao_confianca_media: 0.30
+  fracao_confianca_alta: 0.70
+  # Só observações com esta confiança mínima entram no cálculo da
+  # climatologia de referência. Evita que nuvem residual contamine a régua.
+  confianca_minima_climatologia: "ALTA"
+  confianca_minima_notificacao: "MEDIA"
+  # Classes SCL descartadas: 3 sombra, 8 nuvem média, 9 nuvem alta,
+  # 10 cirro, 11 neve/gelo. 1 (saturado) e 2 (sombra escura) também saem.
+  scl_descartadas: [1, 2, 3, 8, 9, 10, 11]
+
+# ── Índices calculados ─────────────────────────────────────────────────────
+# 'alerta: true' faz o índice entrar no mecanismo de anomalia.
+# 'direcao' define o lado que dispara: alta, baixa ou ambas.
+indices:
+  ndvi:
+    nome: "Vegetação (NDVI)"
+    descricao: "Vegetação fotossintética; sobre água indica cobertura flutuante"
+    alerta: true
+    direcao: "alta"
+    z_atencao: 1.5
+    z_alerta: 2.0
+
+  fai:
+    nome: "Algas flutuantes (FAI)"
+    descricao: "Índice de linha de base; mais robusto que NDVI a aerossol"
+    alerta: true
+    direcao: "alta"
+    z_atencao: 1.5
+    z_alerta: 2.0
+
+  ndci:
+    nome: "Clorofila relativa (NDCI)"
+    descricao: "Red-edge; proxy de biomassa fitoplanctônica e eutrofização"
+    alerta: true
+    direcao: "alta"
+    z_atencao: 1.5
+    z_alerta: 2.0
+
+  ndti:
+    nome: "Turbidez relativa (NDTI)"
+    descricao: "Razão vermelho-verde; proxy de sedimento em suspensão"
+    alerta: true
+    direcao: "alta"
+    z_atencao: 1.5
+    z_alerta: 2.0
+
+  cdom:
+    nome: "Matéria orgânica dissolvida (proxy)"
+    descricao: "Razão verde/vermelho; indicativo, alta incerteza em água interior"
+    alerta: false          # exploratório: acompanha, não dispara
+    direcao: "ambas"
+
+  ndwi:
+    nome: "Água (NDWI)"
+    descricao: "Delimitação da lâmina d'água"
+    alerta: false
+    direcao: "ambas"
+
+  ndmi:
+    nome: "Umidade (NDMI)"
+    descricao: "Discrimina vegetação úmida de substrato exposto"
+    alerta: false
+    direcao: "ambas"
+
+# ── Classificação por pixel ────────────────────────────────────────────────
+# Além da média, o sistema conta pixels que cruzam um limiar. É isso que
+# converte índice em área: hectares de água, hectares de cobertura flutuante.
+classificacao:
+  agua:
+    indice: "ndwi"
+    limiar: 0.0            # NDWI > 0 → água
+    operador: "maior"
+  cobertura_flutuante:
+    indice: "fai"
+    limiar: 0.02           # calibrar contra o evento de 2025
+    operador: "maior"
+  floracao:
+    indice: "ndci"
+    limiar: 0.10           # calibrar; sem campo é apenas relativo
+    operador: "maior"
+
+# ── Setores de monitoramento ───────────────────────────────────────────────
+# O contraste entre setores é o que permite identificar padrão espacial.
+# Uma anomalia que aparece em um setor e não nos demais é muito mais
+# informativa que uma anomalia na média do reservatório inteiro.
+setores:
+  - id: "represa"
+    nome: "Represa (integral)"
+    arquivo: "data/setores/represa.geojson"
+    principal: true        # série de referência, compatível com o sistema v1
+
+  # Descomente conforme os polígonos forem desenhados.
+  # - id: "montante"
+  #   nome: "Setor a montante"
+  #   arquivo: "data/setores/montante.geojson"
+  # - id: "jusante"
+  #   nome: "Setor a jusante"
+  #   arquivo: "data/setores/jusante.geojson"
+
+# Pares de setores cujo CONTRASTE é acompanhado como série própria.
+# A diferença cancela sazonalidade, efeito atmosférico e variação de nível,
+# que afetam ambos igualmente — isolando o que é local.
+contrastes:
+  # - id: "jusante_menos_montante"
+  #   nome: "Jusante − Montante"
+  #   a: "jusante"
+  #   b: "montante"
+  #   indices: ["ndci", "ndti", "cdom"]
+
+# ── Climatologia ───────────────────────────────────────────────────────────
+climatologia:
+  estratificacao: "mensal"
+  # Período de referência. Exclua deliberadamente qualquer período de evento
+  # conhecido: incorporá-lo eleva μ e σ e cega o sistema para o que monitora.
+  referencia_inicio: "2016-07-19"
+  referencia_fim: "2024-12-31"
+  n_minimo_por_mes: 5      # abaixo disso o mês é marcado como pouco confiável
+  estimador: "media_dp"    # alternativa: "mediana_mad" (robusto)
+
+# ── Alerta ─────────────────────────────────────────────────────────────────
+alerta:
+  # Exige ultrapassagem do limiar em duas observações qualificadas
+  # consecutivas. Pico de cena única é assinatura típica de nuvem residual.
+  exigir_persistencia: true
+  # Índices que, disparando juntos na mesma data, elevam a prioridade.
+  combinacoes_relevantes:
+    - indices: ["ndvi", "fai"]
+      rotulo: "Expansão de vegetação flutuante"
+    - indices: ["ndci", "ndti"]
+      rotulo: "Alteração da qualidade da água"
+
+# ── Ressalvas obrigatórias ─────────────────────────────────────────────────
+# Reproduzidas na interface e nas notificações. Não são decorativas: sem
+# calibração local, estes índices são relativos, não concentrações.
+ressalvas:
+  - "Os índices são relativos e expressos como anomalia frente ao histórico. Sem amostragem de campo, não correspondem a concentrações."
+  - "A correção atmosférica utilizada é destinada a superfícies terrestres e introduz incerteza adicional sobre água."
+  - "O sistema detecta alteração espectral. Não identifica espécie, substância ou origem de lançamento."
+  - "Alertas são triagem e indicam necessidade de verificação independente."

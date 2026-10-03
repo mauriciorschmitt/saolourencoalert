@@ -1,3 +1,8 @@
+# ── módulo de macrófitas (monitor_ndvi.py) ────────────────────────────────
 requests>=2.31
-pyproj>=3.6
 Pillow>=10.0
+
+# ── módulo de qualidade da água (src/) ────────────────────────────────────
+PyYAML>=6.0
+pyproj>=3.6
+shapely>=2.0
