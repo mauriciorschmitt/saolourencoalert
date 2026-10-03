@@ -1,0 +1,66 @@
+{
+  "local": {
+    "nome": "Represa São Lourenço",
+    "municipio": "Mafra",
+    "uf": "SC",
+    "timezone": "America/Sao_Paulo"
+  },
+  "atualizado_em": "2026-10-03T12:17:30.522926+00:00",
+  "ressalvas": [
+    "Os índices são relativos e expressos como anomalia frente ao histórico. Sem amostragem de campo, não correspondem a concentrações.",
+    "A correção atmosférica utilizada é destinada a superfícies terrestres e introduz incerteza adicional sobre água.",
+    "O sistema detecta alteração espectral. Não identifica espécie, substância ou origem de lançamento.",
+    "Alertas são triagem e indicam necessidade de verificação independente."
+  ],
+  "indices": {
+    "ndvi": {
+      "nome": "Vegetação (NDVI)",
+      "descricao": "Vegetação fotossintética; sobre água indica cobertura flutuante",
+      "alerta": true
+    },
+    "fai": {
+      "nome": "Algas flutuantes (FAI)",
+      "descricao": "Índice de linha de base; mais robusto que NDVI a aerossol",
+      "alerta": true
+    },
+    "ndci": {
+      "nome": "Clorofila relativa (NDCI)",
+      "descricao": "Red-edge; proxy de biomassa fitoplanctônica e eutrofização",
+      "alerta": true
+    },
+    "ndti": {
+      "nome": "Turbidez relativa (NDTI)",
+      "descricao": "Razão vermelho-verde; proxy de sedimento em suspensão",
+      "alerta": true
+    },
+    "cdom": {
+      "nome": "Matéria orgânica dissolvida (proxy)",
+      "descricao": "Razão verde/vermelho; indicativo, alta incerteza em água interior",
+      "alerta": false
+    },
+    "ndwi": {
+      "nome": "Água (NDWI)",
+      "descricao": "Delimitação da lâmina d'água",
+      "alerta": false
+    },
+    "ndmi": {
+      "nome": "Umidade (NDMI)",
+      "descricao": "Discrimina vegetação úmida de substrato exposto",
+      "alerta": false
+    }
+  },
+  "classificacoes": [
+    "agua",
+    "cobertura_flutuante",
+    "floracao"
+  ],
+  "setores": [
+    {
+      "id": "represa",
+      "nome": "Represa (integral)",
+      "principal": true,
+      "observacoes": 367
+    }
+  ],
+  "contrastes": []
+}
