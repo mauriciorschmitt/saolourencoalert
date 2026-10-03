@@ -401,16 +401,33 @@ function ativarHover(){
 // Se ele mudar de lugar ou sair do ar, esta aba degrada para um link.
 
 async function montarMacrofitas(){
-  const alvo = document.getElementById('conteudo-abas');
-  if(!ANT){
-    const [ultimo, passagens, csv] = await Promise.all([
-      tentarEm(DADOS+'ultimo.json'),
-      tentarEm(DADOS+'passagens_30d.json'),
-      tentarEm(DADOS+'historico.csv','texto'),
-    ]);
-    ANT = {ultimo, passagens, serie: csv ? parseCSV(csv).filter(r=>r.date||r.data) : []};
+  try{
+    if(!ANT){
+      // Limite de tempo: rede pendurada não deve deixar a aba travada.
+      const prazo = new Promise(r=>setTimeout(()=>r('prazo'), 12000));
+      const busca = Promise.all([
+        tentarEm(DADOS+'ultimo.json'),
+        tentarEm(DADOS+'passagens_30d.json'),
+        tentarEm(DADOS+'historico.csv','texto'),
+      ]);
+      const r = await Promise.race([busca, prazo]);
+      if(r === 'prazo') throw new Error(
+        'As requisições não responderam a tempo.');
+      const [ultimo, passagens, csv] = r;
+      ANT = {ultimo, passagens,
+             serie: csv ? parseCSV(csv).filter(x=>x.date||x.data) : []};
+    }
+    desenharMacrofitas();
+  }catch(e){
+    const alvo = document.getElementById('conteudo-abas');
+    if(alvo) alvo.innerHTML = `<div class="painel-img">
+      <p class="img-vazio">Não foi possível carregar os dados de macrófitas.<br>
+        <span style="font-size:13px">${e.message}</span></p>
+      <p class="externo" style="text-align:center">
+        O painel original continua em
+        <a href="${ANTIGO_URL}">${ANTIGO_URL}</a>.</p></div>`;
+    ANT = null;   // permite nova tentativa ao voltar para a aba
   }
-  desenharMacrofitas();
 }
 
 async function tentarEm(url, tipo='json'){
@@ -424,6 +441,17 @@ async function tentarEm(url, tipo='json'){
 function desenharMacrofitas(){
   const alvo = document.getElementById('conteudo-abas');
   if(!alvo) return;
+  try{ desenhar_(alvo); }
+  catch(e){
+    alvo.innerHTML = `<div class="painel-img">
+      <p class="img-vazio">Erro ao montar o painel de macrófitas.<br>
+      <span style="font-size:13px">${e.message}</span></p>
+      <p class="externo" style="text-align:center">
+        Painel original: <a href="${ANTIGO_URL}">${ANTIGO_URL}</a></p></div>`;
+  }
+}
+
+function desenhar_(alvo){
 
   if(!ANT || (!ANT.ultimo && !ANT.serie.length)){
     alvo.innerHTML = `<div class="painel-img">
@@ -619,13 +647,16 @@ function render(){
   document.querySelectorAll('.aba').forEach(b=>{
     b.onclick=()=>{
       if(ESTADO.aba===b.dataset.aba) return;
-      ESTADO.aba=b.dataset.aba; render();
-      if(ESTADO.aba==='macro') montarMacrofitas();
+      ESTADO.aba=b.dataset.aba;
+      render();
     };
   });
 
+  // O carregamento da aba é disparado aqui, e não no clique: assim qualquer
+  // caminho que exiba a aba busca os dados, e ela não fica presa em
+  // "Carregando" se o render for chamado de outro lugar.
   if(ESTADO.aba==='agua') ativarHover();
-  else if(ANT) desenharMacrofitas();
+  else montarMacrofitas();
 
   document.querySelectorAll('tbody tr').forEach(tr=>{
     const troca = ()=>{ESTADO.indice = tr.dataset.i; render();};
