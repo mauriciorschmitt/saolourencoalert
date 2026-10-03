@@ -409,12 +409,22 @@ async function montarMacrofitas(){
         tentarEm(DADOS+'ultimo.json'),
         tentarEm(DADOS+'passagens_30d.json'),
         tentarEm(DADOS+'historico.csv','texto'),
+        tentarEm(DADOS+'imagens.json'),
       ]);
       const r = await Promise.race([busca, prazo]);
       if(r === 'prazo') throw new Error(
         'As requisições não responderam a tempo.');
-      const [ultimo, passagens, csv] = r;
-      ANT = {ultimo, passagens,
+      const [ultimo, passagens, csv, imagens] = r;
+      // passagens_30d.json é um objeto {schema_version, scenes:[...]},
+      // não uma lista solta. Aceita as duas formas por segurança.
+      const cenas = Array.isArray(passagens) ? passagens
+                  : (passagens && Array.isArray(passagens.scenes) ? passagens.scenes : []);
+      // imagens.json lista TODO o arquivo de painéis; passagens_30d cobre
+      // apenas a janela recente. Preferimos o índice completo quando existe.
+      const arquivadas = (imagens && Array.isArray(imagens.datas))
+        ? imagens.datas.slice().sort().reverse()
+        : cenas.filter(c=>c.has_image).map(c=>c.date);
+      ANT = {ultimo, cenas, arquivadas,
              serie: csv ? parseCSV(csv).filter(x=>x.date||x.data) : []};
     }
     desenharMacrofitas();
@@ -466,8 +476,11 @@ function desenhar_(alvo){
 
   const u = ANT.ultimo || {};
   // Só as passagens que têm painel arquivado entram no seletor de datas.
-  const comImagem = (ANT.passagens || []).filter(p=>p.has_image)
-    .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const melhor = (ANT.cenas || []).find(c=>c.best);
+  const comImagem = (ANT.arquivadas || []).map(d=>{
+    const c = (ANT.cenas || []).find(x=>x.date===d);
+    return {date:d, best: !!(c && c.best)};
+  });
   const dataInicial = (comImagem[0] && comImagem[0].date) || u.date || '';
 
   const métricas = [
@@ -478,6 +491,8 @@ function desenhar_(alvo){
 
   const z = num(u.zscore);
   const st = (u.status||'').toUpperCase();
+  const cf = (u.confianca||'').toUpperCase();
+  const vf = num(u.valid_fraction);
   const corSt = st==='ALERTA' ? 'var(--alert)'
               : st==='ATENÇÃO'||st==='ATENCAO' ? 'var(--silt)' : 'var(--muted)';
 
@@ -500,6 +515,12 @@ function desenhar_(alvo){
         <div class="k">cena mais recente</div></div>`:''}
     </div>
 
+    ${cf && cf!=='ALTA' ? `<p class="aviso ${cf==='BAIXA'?'grave':''}">
+      Esta leitura cobriu ${vf!==null?fmt(vf*100,0):'—'}% da represa.
+      ${cf==='BAIXA'
+        ? 'Nuvem residual tende a elevar artificialmente o NDVI, então o escore acima deve ser lido com reserva.'
+        : 'O valor é utilizável, mas menos comparável ao histórico que uma passagem sem nuvens.'}</p>` : ''}
+
     <div class="painel-img">
       <div class="img-barra">
         <div>
@@ -508,7 +529,7 @@ function desenhar_(alvo){
             comImagem.length
               ? comImagem.map(p=>`<option value="${p.date}">${
                   new Date(p.date+'T12:00:00').toLocaleDateString('pt-BR')}${
-                  p.best?' · melhor cena':''}</option>`).join('')
+                  p.best?' · melhor cena recente':''}</option>`).join('')
               : `<option value="${dataInicial}">${dataInicial||'única disponível'}</option>`
           }</select>
         </div>
@@ -517,9 +538,9 @@ function desenhar_(alvo){
     </div>
 
     <p class="externo">O painel combina composição em cor real, NDVI e NDWI
-      da mesma cena. O arquivo de imagens cobre apenas as passagens desde
-      que o sistema entrou em operação — para a série numérica completa,
-      desde 2016, use a aba de qualidade da água.
+      da mesma cena. São ${comImagem.length} painéis arquivados, cobrindo as
+      passagens desde que o módulo entrou em operação — para a série
+      numérica completa, desde 2016, use a aba de qualidade da água.
       <br><br>O painel original, com a lista de passagens e o histórico
       completo de macrófitas, segue disponível em
       <a href="${ANTIGO_URL}">macrofitas.html</a>.</p>
