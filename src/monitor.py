@@ -28,7 +28,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src import evalscripts, sentinelhub as sh
+from src import campo, evalscripts, sentinelhub as sh
 from src.analise import (
     Climatologia, atende, avaliar_combinacoes, avaliar_niveis, confianca,
     confirmar_persistencia, consolidar_persistencia_nivel, serie_contraste,
@@ -371,6 +371,12 @@ def main() -> int:
         series[setor["id"]] = completa
 
     publicar_metadados(cfg, setores, series)
+
+    # Validação independente: cruza as observações de campo com a série.
+    # Roda sempre; se não houver observações, apenas registra isso no log.
+    principal = next((s for s in setores if s.get("principal")), setores[0] if setores else None)
+    if principal and series.get(principal["id"]):
+        campo.executar(RAIZ, series[principal["id"]])
 
     for c in cfg.get("contrastes") or []:
         if c["a"] in series and c["b"] in series:
