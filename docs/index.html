@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Represa São Lourenço — monitoramento da água</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:wght@300;400;600&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ground:#EDF0EF; --panel:#FFFFFF; --ink:#12303A; --muted:#5E747C;
+  --line:#D2DBD9; --water:#2A6B8C; --algae:#6E9435; --silt:#A8762F;
+  --alert:#A8432A; --band:#C9D6D4;
+  --serif:'Spectral',Georgia,serif; --sans:'Archivo','Segoe UI',system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{--ground:#0E1C21; --panel:#132930; --ink:#E4ECEA; --muted:#8EA6AC;
+        --line:#26414A; --band:#24414A; --water:#5AA3C4; --algae:#9BC25C;
+        --silt:#D2A45C; --alert:#E0795A;}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);
+     font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1040px;margin:0 auto;padding:32px 20px 64px}
+a{color:var(--water)}
+.num{font-variant-numeric:tabular-nums}
+
+/* cabeçalho */
+header{border-bottom:1px solid var(--line);padding-bottom:20px;margin-bottom:28px}
+h1{font-family:var(--serif);font-weight:400;font-size:clamp(28px,5vw,40px);
+   margin:0 0 4px;letter-spacing:-.01em}
+.sub{color:var(--muted);font-size:14px;margin:0}
+
+/* abas */
+.abas{display:flex;border-bottom:1px solid var(--line);margin-bottom:30px}
+.aba{appearance:none;background:none;border:none;border-bottom:2px solid transparent;
+  padding:11px 2px;margin-right:30px;font-size:15px;color:var(--muted);
+  cursor:pointer;font-family:inherit;font-weight:500}
+.aba:hover{color:var(--ink)}
+.aba[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--water)}
+.aba:focus-visible{outline:2px solid var(--water);outline-offset:2px}
+
+/* painel de imagens do sistema de macrófitas */
+.painel-img{background:var(--panel);border:1px solid var(--line);padding:16px}
+.painel-img img{width:100%;height:auto;display:block;border:1px solid var(--line)}
+.img-barra{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;margin-bottom:14px}
+.img-barra label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+.img-barra select{font-family:inherit;font-size:14px;padding:7px 10px;
+  border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+.img-vazio{color:var(--muted);font-size:14px;padding:30px 0;text-align:center}
+.resumo-ant{display:flex;flex-wrap:wrap;gap:34px;margin:20px 0 26px}
+.resumo-ant .it .v{font-family:var(--serif);font-size:30px;font-weight:300;line-height:1.1}
+.resumo-ant .it .k{font-size:12.5px;color:var(--muted);margin-top:2px}
+.externo{font-size:13.5px;color:var(--muted);margin-top:20px;max-width:70ch}
+
+/* estado atual */
+.estado{display:grid;grid-template-columns:auto minmax(0,1fr);gap:44px;
+        align-items:start;margin-bottom:44px}
+@media (max-width:720px){.estado{grid-template-columns:1fr;gap:24px}}
+.mapa svg{height:auto;display:block;max-width:100%}
+.leituras{display:flex;flex-direction:column;gap:22px;align-items:flex-start}
+.leitura .valor{font-family:var(--serif);font-size:clamp(34px,7vw,52px);
+                font-weight:300;line-height:1;letter-spacing:-.02em}
+.leitura .valor span{font-size:.42em;color:var(--muted);margin-left:.3em;
+                     letter-spacing:0}
+.leitura .rot{font-size:13px;color:var(--muted);margin-top:4px}
+
+/* selo de confiança */
+.selo{display:inline-flex;align-items:center;gap:7px;font-size:13px;
+      font-weight:500;padding:4px 11px;border:1px solid currentColor;
+      border-radius:2px}
+.selo i{width:7px;height:7px;border-radius:50%;background:currentColor;
+        font-style:normal}
+.c-alta{color:var(--algae)} .c-media{color:var(--silt)} .c-baixa{color:var(--alert)}
+
+.aviso{border-left:3px solid var(--silt);padding:10px 0 10px 14px;
+       font-size:13.5px;color:var(--muted);max-width:62ch}
+.aviso.grave{border-color:var(--alert)}
+
+/* lista de índices */
+h2{font-family:var(--serif);font-weight:400;font-size:22px;margin:0 0 2px}
+.secao{margin-bottom:40px}
+.secao p.intro{color:var(--muted);font-size:14px;margin:0 0 16px;max-width:66ch}
+table{width:100%;border-collapse:collapse}
+th{font-size:12px;font-weight:500;color:var(--muted);text-align:left;
+   padding:0 10px 8px 0;border-bottom:1px solid var(--line);white-space:nowrap}
+th.r,td.r{text-align:right;padding-right:0}
+td{padding:11px 10px 11px 0;border-bottom:1px solid var(--line);font-size:14px;
+   vertical-align:middle}
+tr.sel td{background:rgba(42,107,140,.07)}
+tbody tr{cursor:pointer}
+tbody tr:hover td{background:rgba(42,107,140,.05)}
+tbody tr:focus-visible{outline:2px solid var(--water);outline-offset:-2px}
+.nome{font-weight:500}
+.desc{display:block;color:var(--muted);font-size:12.5px;font-weight:400;
+      margin-top:2px;max-width:46ch}
+.spark{display:block}
+.st{font-size:12px;font-weight:500;white-space:nowrap}
+.st-ALERTA{color:var(--alert)} .st-ATENCAO{color:var(--silt)}
+.st-NORMAL{color:var(--muted)} .st-SEM_REFERENCIA{color:var(--muted);opacity:.6}
+.conf-tag{font-size:11px;color:var(--alert);display:block;margin-top:2px}
+
+/* gráfico */
+.gchart{background:var(--panel);border:1px solid var(--line);padding:18px;
+  position:relative}
+.gchart svg{touch-action:pan-y}
+.tip{position:absolute;pointer-events:none;background:var(--ink);
+  color:var(--ground);font-size:12px;line-height:1.45;padding:7px 10px;
+  border-radius:3px;white-space:nowrap;opacity:0;transition:opacity .12s;
+  z-index:5;box-shadow:0 2px 8px rgba(0,0,0,.22)}
+.tip.on{opacity:1} .tip b{font-weight:600} .tip .fora{color:#FFC4B0}
+.dica-graf{font-size:12px;color:var(--muted);margin:10px 0 0}
+.gchart svg{width:100%;height:auto;display:block}
+.legenda{display:flex;flex-wrap:wrap;gap:18px;font-size:12.5px;
+         color:var(--muted);margin-top:12px}
+.legenda span{display:inline-flex;align-items:center;gap:6px}
+.chip{width:14px;height:3px;border-radius:2px;display:inline-block}
+
+footer{border-top:1px solid var(--line);padding-top:20px;font-size:13px;
+       color:var(--muted)}
+footer ul{margin:10px 0 0;padding-left:18px}
+footer li{margin-bottom:6px;max-width:74ch}
+.erro{border:1px solid var(--alert);color:var(--alert);padding:16px;
+      font-size:14px;max-width:70ch}
+.erro code{background:rgba(168,67,42,.1);padding:1px 5px}
+@media (prefers-reduced-motion:no-preference){
+  .fade{animation:f .5s ease both}@keyframes f{from{opacity:0}to{opacity:1}}
+}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <p class="sub">Carregando leituras…</p>
+</div>
+
+<script>
+const DADOS = 'data/';
+// Os dois módulos convivem no mesmo repositório e publicam na mesma pasta:
+// o de macrófitas escreve ultimo.json, passagens_30d.json e os painéis em
+// images/; o de qualidade da água escreve represa.csv e resumo.json.
+// Nenhum sobrescreve arquivo do outro.
+const ANTIGO = '';                       // mesma pasta docs/
+const ANTIGO_URL = 'macrofitas.html';    // painel original, preservado
+const CLS = {agua:'lâmina d\u2019água', cobertura_flutuante:'cobertura flutuante',
+             floracao:'floração'};
+
+// ── utilidades ─────────────────────────────────────────────────────────────
+const num = v => {const n = parseFloat(v); return Number.isFinite(n) ? n : null;};
+const fmt = (v,d=2) => v===null||v===undefined ? '—'
+  : v.toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d});
+const dataBR = s => s ? new Date(s+'T12:00:00').toLocaleDateString('pt-BR',
+  {day:'numeric',month:'long',year:'numeric'}) : '—';
+
+function parseCSV(txt){
+  const linhas = txt.trim().split(/\r?\n/);
+  if(linhas.length < 2) return [];
+  const cab = linhas[0].split(',');
+  return linhas.slice(1).map(l=>{
+    // Campos simples: o gerador não escreve vírgulas dentro de valores.
+    const c = l.split(','), o = {};
+    cab.forEach((k,i)=> o[k] = c[i] === undefined ? '' : c[i]);
+    return o;
+  });
+}
+
+async function buscar(arq, tipo='json'){
+  const r = await fetch(DADOS+arq, {cache:'no-store'});
+  if(!r.ok) throw new Error(arq+' → HTTP '+r.status);
+  return tipo==='json' ? r.json() : r.text();
+}
+
+async function tentar(arq, tipo='json'){
+  try{ return await buscar(arq, tipo); }catch(e){ return null; }
+}
+
+// Metadados derivados do próprio CSV. Permite que a página funcione mesmo
+// antes de o monitor publicar resumo.json — útil na primeira configuração.
+const ROTULOS = {
+  ndvi:['Vegetação (NDVI)','Vegetação fotossintética; sobre água indica cobertura flutuante',1],
+  fai:['Algas flutuantes (FAI)','Índice de linha de base; mais robusto que NDVI a aerossol',1],
+  ndci:['Clorofila relativa (NDCI)','Red-edge; proxy de biomassa fitoplanctônica e eutrofização',1],
+  ndti:['Turbidez relativa (NDTI)','Razão vermelho-verde; proxy de sedimento em suspensão',1],
+  cdom:['Matéria orgânica dissolvida','Razão verde/vermelho; indicativo, alta incerteza em água interior',0],
+  ndwi:['Água (NDWI)','Delimitação da lâmina d\u2019água',0],
+  ndmi:['Umidade (NDMI)','Discrimina vegetação úmida de substrato exposto',0],
+};
+
+function resumoDoCSV(linhas, setorId){
+  const cols = Object.keys(linhas[0]);
+  const indices = {};
+  for(const k in ROTULOS){
+    if(cols.includes(k)){
+      indices[k] = {nome:ROTULOS[k][0], descricao:ROTULOS[k][1],
+                    alerta: !!ROTULOS[k][2] && cols.includes(k+'_status')};
+    }
+  }
+  return {
+    local:{nome:'Represa São Lourenço', municipio:'Mafra', uf:'SC'},
+    atualizado_em:new Date().toISOString(),
+    ressalvas:[
+      'Os índices são relativos e expressos como anomalia frente ao histórico. Sem amostragem de campo, não correspondem a concentrações.',
+      'A correção atmosférica utilizada é destinada a superfícies terrestres e introduz incerteza adicional sobre água.',
+      'O sistema detecta alteração espectral. Não identifica espécie, substância ou origem de lançamento.',
+      'Alertas são triagem e indicam necessidade de verificação independente.'],
+    indices,
+    setores:[{id:setorId, nome:'Represa', principal:true, observacoes:linhas.length}],
+    contrastes:[], _derivado:true
+  };
+}
+
+// ── climatologia recalculada no cliente, para desenhar a faixa ─────────────
+function climatologia(linhas, indice){
+  const balde = {};
+  linhas.forEach(r=>{
+    if(r.confianca !== 'ALTA') return;
+    if(r.data > '2024-12-31') return;          // período de referência
+    const v = num(r[indice]); if(v===null) return;
+    const m = +r.data.slice(5,7);
+    (balde[m] = balde[m] || []).push(v);
+  });
+  const out = {};
+  for(const m in balde){
+    const vs = balde[m]; if(vs.length < 2) continue;
+    const mu = vs.reduce((a,b)=>a+b,0)/vs.length;
+    const dp = Math.sqrt(vs.reduce((a,b)=>a+(b-mu)**2,0)/(vs.length-1));
+    out[m] = {mu, dp, n: vs.length};
+  }
+  return out;
+}
+
+const estreito = () => window.matchMedia('(max-width:720px)').matches;
+
+// ── silhueta do reservatório ───────────────────────────────────────────────
+function silhueta(geojson, largura=240, alturaMax=380){
+  const f = geojson.features.find(x=>x.properties.principal) || geojson.features[0];
+  if(!f) return '';
+  const anel = f.geometry.coordinates[0];
+  const lats = anel.map(p=>p[1]), lons = anel.map(p=>p[0]);
+  const lat0 = (Math.min(...lats)+Math.max(...lats))/2;
+  const k = Math.cos(lat0*Math.PI/180);          // corrige a convergência
+  const xs = lons.map(l=>l*k), ys = lats;
+  const x0=Math.min(...xs), x1=Math.max(...xs);
+  const y0=Math.min(...ys), y1=Math.max(...ys);
+  // Reservatório de vale é muito alongado: escalar só pela largura produz
+  // uma silhueta desproporcional. Limita pelos dois eixos.
+  const pad = 8;
+  const esc = Math.min((largura-2*pad)/(x1-x0), (alturaMax-2*pad)/(y1-y0));
+  const larg = (x1-x0)*esc + 2*pad;
+  const altura = (y1-y0)*esc + 2*pad;
+  const d = anel.map((p,i)=>{
+    const X = pad + (p[0]*k - x0)*esc;
+    const Y = altura - pad - (p[1]-y0)*esc;      // norte para cima
+    return (i?'L':'M')+X.toFixed(1)+' '+Y.toFixed(1);
+  }).join(' ')+' Z';
+  return `<svg viewBox="0 0 ${larg.toFixed(0)} ${altura.toFixed(0)}"
+    width="${larg.toFixed(0)}" height="${altura.toFixed(0)}" role="img"
+    aria-label="Contorno da ${f.properties.nome}">
+    <path d="${d}" fill="var(--water)" fill-opacity=".22"
+          stroke="var(--water)" stroke-width="1.4" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+// ── sparkline ──────────────────────────────────────────────────────────────
+function sparkline(vals, cor, w=110, h=26){
+  const v = vals.filter(x=>x!==null);
+  if(v.length < 2) return `<svg width="${w}" height="${h}"></svg>`;
+  const lo=Math.min(...v), hi=Math.max(...v), amp=(hi-lo)||1;
+  const pts = v.map((y,i)=>[
+    (i/(v.length-1))*(w-2)+1,
+    h-2-((y-lo)/amp)*(h-4)
+  ]);
+  const d = pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  const u = pts[pts.length-1];
+  return `<svg class="spark" width="${w}" height="${h}" aria-hidden="true">
+    <path d="${d}" fill="none" stroke="${cor}" stroke-width="1.3"
+          stroke-linejoin="round" stroke-linecap="round" opacity=".85"/>
+    <circle cx="${u[0].toFixed(1)}" cy="${u[1].toFixed(1)}" r="2.2" fill="${cor}"/>
+  </svg>`;
+}
+
+// ── gráfico principal ──────────────────────────────────────────────────────
+let GRAF = null;   // guarda o que o interativo precisa após a renderização
+
+function grafico(linhas, indice, clim, rotulo){
+  const W=980, H=300, ml=52, mr=14, mt=16, mb=30;
+  const pts = linhas.map(r=>({t:r.data, v:num(r[indice]),
+                              c:r.confianca, m:+r.data.slice(5,7)}))
+                    .filter(p=>p.v!==null);
+  if(pts.length < 2) return '<p class="sub">Série insuficiente para o gráfico.</p>';
+
+  const t0=+new Date(pts[0].t), t1=+new Date(pts[pts.length-1].t);
+  const bandas = pts.map(p=>clim[p.m]).filter(Boolean);
+  const todos = pts.map(p=>p.v)
+    .concat(bandas.map(b=>b.mu+2*b.dp), bandas.map(b=>b.mu-2*b.dp));
+  let lo=Math.min(...todos), hi=Math.max(...todos);
+  const folga=(hi-lo)*.08 || .1; lo-=folga; hi+=folga;
+
+  const X = t => ml + ((+new Date(t)-t0)/(t1-t0||1))*(W-ml-mr);
+  const Y = v => mt + (1-(v-lo)/(hi-lo))*(H-mt-mb);
+
+  // faixa ±2σ: polígono superior seguido do inferior invertido
+  const comB = pts.filter(p=>clim[p.m]);
+  let faixa='';
+  if(comB.length > 1){
+    const sup = comB.map(p=>`${X(p.t).toFixed(1)},${Y(clim[p.m].mu+2*clim[p.m].dp).toFixed(1)}`);
+    const inf = comB.slice().reverse()
+      .map(p=>`${X(p.t).toFixed(1)},${Y(clim[p.m].mu-2*clim[p.m].dp).toFixed(1)}`);
+    faixa = `<polygon points="${sup.concat(inf).join(' ')}"
+              fill="var(--band)" opacity=".5"/>`;
+  }
+
+  const linha = pts.map((p,i)=>(i?'L':'M')+X(p.t).toFixed(1)+' '+Y(p.v).toFixed(1)).join(' ');
+  GRAF = {pts, X, Y, W, H, clim};
+
+  // Ponto fora da faixa esperada do mês recebe destaque próprio: é o que
+  // o olho precisa achar primeiro ao abrir o painel.
+  const fora = p => {const c=clim[p.m]; return c ? Math.abs(p.v-c.mu) > 2*c.dp : false;};
+  const marcas = pts.map(p=>{
+    const f2 = fora(p);
+    const cor = f2 ? 'var(--alert)'
+              : p.c==='ALTA' ? 'var(--water)'
+              : p.c==='MEDIA' ? 'var(--silt)' : 'var(--alert)';
+    const r = f2 ? 3.2 : (p.c==='ALTA' ? 2.4 : 1.8);
+    return `<circle cx="${X(p.t).toFixed(1)}" cy="${Y(p.v).toFixed(1)}" r="${r}"
+      fill="${cor}" opacity="${p.c==='BAIXA'&&!f2?.45:.9}"
+      ${f2?'stroke="var(--alert)" stroke-width="1" stroke-opacity=".35"':''}/>`;
+  }).join('');
+
+  // eixos
+  const ticksY=[lo,(lo+hi)/2,hi].map(v=>
+    `<line x1="${ml}" x2="${W-mr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"
+       stroke="var(--line)" stroke-width="1"/>
+     <text x="${ml-8}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end"
+       font-size="11" fill="var(--muted)">${fmt(v,2)}</text>`).join('');
+  const anos=[...new Set(pts.map(p=>p.t.slice(0,4)))];
+  const ticksX=anos.map(a=>{
+    const p=pts.find(q=>q.t.slice(0,4)===a);
+    return `<text x="${X(p.t).toFixed(1)}" y="${H-8}" text-anchor="middle"
+      font-size="11" fill="var(--muted)">${a}</text>`;
+  }).join('');
+
+  return `<svg viewBox="0 0 ${W} ${H}" role="img"
+    aria-label="Série temporal de ${rotulo}">
+    ${ticksY}${faixa}
+    <path d="${linha}" fill="none" stroke="var(--ink)" stroke-width="1.2"
+      opacity=".55" stroke-linejoin="round"/>
+    ${marcas}${ticksX}
+    <line class="cursor" x1="0" x2="0" y1="${mt}" y2="${H-mb}" stroke="var(--ink)"
+      stroke-width="1" opacity="0" stroke-dasharray="2 3"/>
+    <circle class="foco" r="5" fill="none" stroke="var(--ink)" stroke-width="1.6" opacity="0"/>
+  </svg>
+  <div class="tip"></div>
+  <div class="legenda">
+    <span><i class="chip" style="background:var(--band)"></i>faixa esperada para o mês (±2 desvios)</span>
+    <span><i class="chip" style="background:var(--alert)"></i>fora da faixa</span>
+    <span><i class="chip" style="background:var(--water)"></i>leitura confiável</span>
+    <span><i class="chip" style="background:var(--silt)"></i>parcial</span>
+  </div>
+  <p class="dica-graf">Passe o cursor sobre o gráfico para ver cada passagem.</p>`;
+}
+
+function ativarHover(){
+  if(!GRAF) return;
+  const box=document.querySelector('.gchart'); if(!box) return;
+  const svg=box.querySelector('svg'), tip=box.querySelector('.tip');
+  const cur=svg.querySelector('.cursor'), foco=svg.querySelector('.foco');
+  if(!svg||!tip) return;
+  const {pts,X,Y,W,H,clim}=GRAF;
+  const fora=p=>{const c=clim[p.m]; return c?Math.abs(p.v-c.mu)>2*c.dp:false;};
+
+  function mover(ev){
+    const r=svg.getBoundingClientRect();
+    const cx=ev.touches?ev.touches[0].clientX:ev.clientX;
+    const xv=((cx-r.left)/r.width)*W;
+    let melhor=0,dist=Infinity;
+    pts.forEach((p,i)=>{const d=Math.abs(X(p.t)-xv); if(d<dist){dist=d;melhor=i;}});
+    const p=pts[melhor],px=X(p.t),py=Y(p.v),f2=fora(p);
+    cur.setAttribute('x1',px); cur.setAttribute('x2',px); cur.setAttribute('opacity','.35');
+    foco.setAttribute('cx',px); foco.setAttribute('cy',py); foco.setAttribute('opacity','.9');
+    tip.innerHTML=`<b>${new Date(p.t+'T12:00:00').toLocaleDateString('pt-BR')}</b><br>
+      valor ${fmt(p.v,3)}<br>leitura ${p.c.toLowerCase()}${
+      f2?'<br><span class="fora">fora da faixa esperada</span>':''}`;
+    const bx=box.getBoundingClientRect();
+    const left=(px/W)*r.width+(r.left-bx.left);
+    tip.style.left=Math.min(Math.max(left+12,4),bx.width-tip.offsetWidth-4)+'px';
+    tip.style.top=((py/H)*r.height+(r.top-bx.top)-tip.offsetHeight-10)+'px';
+    tip.classList.add('on');
+  }
+  const sair=()=>{tip.classList.remove('on');
+    cur.setAttribute('opacity','0'); foco.setAttribute('opacity','0');};
+  svg.addEventListener('mousemove',mover);
+  svg.addEventListener('mouseleave',sair);
+  svg.addEventListener('touchstart',mover,{passive:true});
+  svg.addEventListener('touchmove',mover,{passive:true});
+  svg.addEventListener('touchend',sair);
+}
+
+// ── aba de macrófitas: consome o sistema anterior ──────────────────────────
+// Nada é duplicado: a página lê os arquivos que aquele sistema já publica.
+// Se ele mudar de lugar ou sair do ar, esta aba degrada para um link.
+
+async function montarMacrofitas(){
+  const alvo = document.getElementById('conteudo-abas');
+  if(!ANT){
+    const [ultimo, passagens, csv] = await Promise.all([
+      tentarEm(DADOS+'ultimo.json'),
+      tentarEm(DADOS+'passagens_30d.json'),
+      tentarEm(DADOS+'historico.csv','texto'),
+    ]);
+    ANT = {ultimo, passagens, serie: csv ? parseCSV(csv).filter(r=>r.date||r.data) : []};
+  }
+  desenharMacrofitas();
+}
+
+async function tentarEm(url, tipo='json'){
+  try{
+    const r = await fetch(url, {cache:'no-store'});
+    if(!r.ok) return null;
+    return tipo==='json' ? r.json() : r.text();
+  }catch(e){ return null; }
+}
+
+function desenharMacrofitas(){
+  const alvo = document.getElementById('conteudo-abas');
+  if(!alvo) return;
+
+  if(!ANT || (!ANT.ultimo && !ANT.serie.length)){
+    alvo.innerHTML = `<div class="painel-img">
+      <p class="img-vazio">Não consegui alcançar os dados do sistema de
+        macrófitas a partir desta página.</p>
+      <p class="externo" style="text-align:center">
+        O módulo de macrófitas ainda não publicou dados neste repositório.
+        O painel original continua em <a href="${ANTIGO_URL}">macrofitas.html</a>.</p>
+    </div>`;
+    return;
+  }
+
+  const u = ANT.ultimo || {};
+  // Só as passagens que têm painel arquivado entram no seletor de datas.
+  const comImagem = (ANT.passagens || []).filter(p=>p.has_image)
+    .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const dataInicial = (comImagem[0] && comImagem[0].date) || u.date || '';
+
+  const métricas = [
+    ['ndvi','NDVI'], ['ndwi','NDWI'], ['ndmi','NDMI'],
+  ].filter(([k])=>u[k]!==undefined && u[k]!==null)
+   .map(([k,r])=>`<div class="it"><div class="v num">${fmt(num(u[k]),3)}</div>
+      <div class="k">${r}</div></div>`).join('');
+
+  const z = num(u.zscore);
+  const st = (u.status||'').toUpperCase();
+  const corSt = st==='ALERTA' ? 'var(--alert)'
+              : st==='ATENÇÃO'||st==='ATENCAO' ? 'var(--silt)' : 'var(--muted)';
+
+  alvo.innerHTML = `
+  <section class="secao">
+    <h2>Monitoramento de macrófitas</h2>
+    <p class="intro">Dados e imagens produzidos pelo sistema anterior, que
+      acompanha a cobertura de vegetação flutuante por NDVI desde 2016.
+      Esta aba exibe o que aquele módulo publica; ele continua operando com
+      sua própria rotina e seu próprio arquivo de série.</p>
+
+    <div class="resumo-ant">
+      ${métricas}
+      ${z!==null?`<div class="it"><div class="v num" style="color:${corSt}">${
+        (z>0?'+':'')+fmt(z,2)}</div><div class="k">escore · ${
+        st.toLowerCase()||'—'}</div></div>`:''}
+      ${u.date?`<div class="it"><div class="v num">${
+        new Date(u.date+'T12:00:00').toLocaleDateString('pt-BR',
+          {day:'2-digit',month:'short'})}</div>
+        <div class="k">cena mais recente</div></div>`:''}
+    </div>
+
+    <div class="painel-img">
+      <div class="img-barra">
+        <div>
+          <label for="sel-data">Data da imagem</label>
+          <select id="sel-data">${
+            comImagem.length
+              ? comImagem.map(p=>`<option value="${p.date}">${
+                  new Date(p.date+'T12:00:00').toLocaleDateString('pt-BR')}${
+                  p.best?' · melhor cena':''}</option>`).join('')
+              : `<option value="${dataInicial}">${dataInicial||'única disponível'}</option>`
+          }</select>
+        </div>
+      </div>
+      <div id="caixa-img"></div>
+    </div>
+
+    <p class="externo">O painel combina composição em cor real, NDVI e NDWI
+      da mesma cena. O arquivo de imagens cobre apenas as passagens desde
+      que o sistema entrou em operação — para a série numérica completa,
+      desde 2016, use a aba de qualidade da água.
+      <br><br>O painel original, com a lista de passagens e o histórico
+      completo de macrófitas, segue disponível em
+      <a href="${ANTIGO_URL}">macrofitas.html</a>.</p>
+  </section>`;
+
+  const sel = document.getElementById('sel-data');
+  const caixa = document.getElementById('caixa-img');
+
+  function mostrar(d){
+    if(!d){ caixa.innerHTML = '<p class="img-vazio">Sem imagem para esta data.</p>'; return; }
+    const img = new Image();
+    img.alt = 'Painel de índices da Represa São Lourenço em '+d;
+    img.onload = ()=>{ caixa.innerHTML=''; caixa.appendChild(img); };
+    img.onerror = ()=>{ caixa.innerHTML = `<p class="img-vazio">
+      A imagem de ${d} não está disponível no arquivo.</p>`; };
+    caixa.innerHTML = '<p class="img-vazio">Carregando imagem…</p>';
+    img.src = 'images/archive/' + d + '/panel.png';
+  }
+
+  if(sel){ sel.onchange = ()=>mostrar(sel.value); }
+  mostrar(dataInicial);
+}
+
+// ── montagem ───────────────────────────────────────────────────────────────
+let ESTADO = {linhas:[], resumo:null, geo:null, indice:null, aba:'agua'};
+let ANT = null;   // dados do sistema de macrófitas, carregados sob demanda
+
+function render(){
+  const {linhas, resumo, geo, indice} = ESTADO;
+  const u = linhas[linhas.length-1];
+  const conf = (u.confianca||'BAIXA').toLowerCase();
+  const nomeConf = {alta:'Leitura confiável', media:'Leitura parcial',
+                    baixa:'Leitura pouco confiável'}[conf] || 'Leitura';
+
+  const areas = Object.keys(CLS)
+    .filter(k=>u['area_'+k+'_ha'] !== undefined && u['area_'+k+'_ha'] !== '')
+    .map(k=>`<div class="leitura">
+        <div class="valor num">${fmt(num(u['area_'+k+'_ha']),1)}<span>ha</span></div>
+        <div class="rot">${CLS[k]}</div></div>`).join('');
+
+  let aviso = '';
+  if(conf !== 'alta'){
+    const pct = fmt(num(u.fracao_valida)*100,0);
+    aviso = `<p class="aviso ${conf==='baixa'?'grave':''}">Esta leitura cobriu
+      ${pct}% da represa; o restante estava encoberto por nuvem ou sombra.
+      ${conf==='baixa' ? 'Nuvem residual tende a elevar artificialmente os índices, então valores altos aqui não indicam necessariamente alteração real.' : 'O valor é utilizável, mas menos comparável ao histórico que uma passagem sem nuvens.'}</p>`;
+  }
+
+  const linhasTab = Object.entries(resumo.indices).map(([k,meta])=>{
+    const z = num(u[k+'_z']);
+    const st = u[k+'_status'] || '';
+    const conf2 = u[k+'_confirmado'];
+    const cor = st==='ALERTA' ? 'var(--alert)' : st==='ATENCAO'
+              ? 'var(--silt)' : 'var(--water)';
+    const serie = linhas.slice(-60).map(r=>num(r[k]));
+    return `<tr tabindex="0" data-i="${k}" class="${k===indice?'sel':''}">
+      <td><span class="nome">${meta.nome}</span>
+          <span class="desc">${meta.descricao}</span></td>
+      <td>${sparkline(serie, cor)}</td>
+      <td class="r num">${fmt(num(u[k]),3)}</td>
+      <td class="r num">${z===null?'—':(z>0?'+':'')+fmt(z,1)}</td>
+      <td class="r"><span class="st st-${st||'SEM_REFERENCIA'}">${
+        meta.alerta ? (st==='ATENCAO'?'atenção':st.toLowerCase()||'—') : 'acompanhamento'}</span>${
+        st==='ALERTA' && conf2==='NAO' ? '<span class="conf-tag">aguardando confirmação</span>' : ''}</td>
+    </tr>`;
+  }).join('');
+
+  const clim = climatologia(linhas, indice);
+  const meta = resumo.indices[indice];
+
+  document.getElementById('app').innerHTML = `
+  <header class="fade">
+    <h1>${resumo.local.nome}</h1>
+    <p class="sub">${resumo.local.municipio}/${resumo.local.uf} · leitura de
+      ${dataBR(u.data)} · ${linhas.length} passagens registradas</p>
+  </header>
+
+  <nav class="abas" role="tablist">
+    <button class="aba" role="tab" id="tab-agua" data-aba="agua"
+      aria-selected="${ESTADO.aba==='agua'}">Qualidade da água</button>
+    <button class="aba" role="tab" id="tab-macro" data-aba="macro"
+      aria-selected="${ESTADO.aba==='macro'}">Macrófitas e imagens</button>
+  </nav>
+
+  <div id="conteudo-abas">${ESTADO.aba==='macro' ? '<p class="sub">Carregando…</p>' : `
+  <section class="estado">
+    ${geo ? `<div class="mapa">${silhueta(geo, estreito()?150:240, estreito()?230:380)}</div>` : ''}
+    <div class="leituras">
+      <span class="selo c-${conf}"><i></i>${nomeConf}</span>
+      <div style="display:flex;gap:40px;flex-wrap:wrap">${areas}</div>
+      ${aviso}
+    </div>
+  </section>
+
+  <section class="secao">
+    <h2>Indicadores</h2>
+    <p class="intro">Cada valor é comparado à média histórica do mesmo mês.
+      O escore indica quantos desvios-padrão a leitura se afasta do esperado.
+      Selecione uma linha para ver a série completa.
+      <a href="indicadores.html">O que cada índice significa</a>.</p>
+    <table>
+      <thead><tr>
+        <th>Indicador</th><th>Últimos meses</th>
+        <th class="r">Valor</th><th class="r">Escore</th><th class="r">Situação</th>
+      </tr></thead>
+      <tbody>${linhasTab}</tbody>
+    </table>
+  </section>
+
+  <section class="secao">
+    <h2>${meta.nome}</h2>
+    <p class="intro">${meta.descricao}.</p>
+    <div class="gchart">${grafico(linhas, indice, clim, meta.nome)}</div>
+  </section>
+
+  `}</div>
+
+  <footer>
+    <a href="indicadores.html">Indicadores e série completa</a> ·
+    Atualizado em ${new Date(resumo.atualizado_em).toLocaleString('pt-BR')}.
+    Dados Sentinel-2 do programa Copernicus.
+    <ul>${resumo.ressalvas.map(r=>`<li>${r}</li>`).join('')}</ul>
+  </footer>`;
+
+  document.querySelectorAll('.aba').forEach(b=>{
+    b.onclick=()=>{
+      if(ESTADO.aba===b.dataset.aba) return;
+      ESTADO.aba=b.dataset.aba; render();
+      if(ESTADO.aba==='macro') montarMacrofitas();
+    };
+  });
+
+  if(ESTADO.aba==='agua') ativarHover();
+  else if(ANT) desenharMacrofitas();
+
+  document.querySelectorAll('tbody tr').forEach(tr=>{
+    const troca = ()=>{ESTADO.indice = tr.dataset.i; render();};
+    tr.addEventListener('click', troca);
+    tr.addEventListener('keydown', e=>{
+      if(e.key==='Enter'||e.key===' '){e.preventDefault();troca();}
+    });
+  });
+}
+
+let redesenho;
+window.addEventListener('resize', ()=>{
+  clearTimeout(redesenho);
+  redesenho = setTimeout(()=>{ if(ESTADO.resumo) render(); }, 200);
+});
+
+(async function(){
+  const app = document.getElementById('app');
+  try{
+    let resumo = await tentar('resumo.json');
+    const setorId = resumo && (resumo.setores.find(s=>s.principal)
+                    || resumo.setores[0] || {}).id || 'represa';
+
+    const csv = await tentar(setorId+'.csv','texto');
+    if(!csv) throw new Error(
+      'Não encontrei data/'+setorId+'.csv. Rode o fluxo "Construir série '+
+      'histórica" na aba Actions — é ele que gera a série.');
+
+    const linhas = parseCSV(csv).filter(r=>r.data);
+    if(!linhas.length) throw new Error('O arquivo data/'+setorId+
+      '.csv existe mas está sem linhas de dados.');
+
+    // Sem resumo.json a página se vira com o que há no CSV.
+    if(!resumo) resumo = resumoDoCSV(linhas, setorId);
+
+    const geo = await tentar('setores.geojson');   // silhueta é opcional
+
+    ESTADO = {linhas, resumo, geo, indice: Object.keys(resumo.indices)[0]};
+    if(!ESTADO.indice) throw new Error(
+      'O CSV não tem nenhuma coluna de índice reconhecida.');
+    render();
+    if(resumo._derivado || !geo){
+      const f = [];
+      if(resumo._derivado) f.push('resumo.json');
+      if(!geo) f.push('setores.geojson');
+      document.querySelector('footer').insertAdjacentHTML('beforeend',
+        `<p class="aviso" style="margin-top:14px">Exibindo com informação
+         reduzida: ${f.join(' e ')} não foi encontrado. Suba a versão
+         atualizada de <code>src/monitor.py</code> e rode o monitoramento
+         novamente para o painel ficar completo.</p>`);
+    }
+  }catch(e){
+    app.innerHTML = `<div class="erro"><strong>Não foi possível carregar os
+      dados.</strong><br><br>${e.message}<br><br>
+      Verifique, pelo GitHub, se a pasta <code>docs/data/</code> contém os
+      arquivos gerados pelo monitoramento. Abrir este arquivo direto do disco
+      também falha — o navegador bloqueia leitura local, use o endereço
+      publicado.</div>`;
+  }
+})();
+</script>
+</body>
+</html>
