@@ -30,8 +30,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src import evalscripts, sentinelhub as sh
 from src.analise import (
-    Climatologia, atende, avaliar_combinacoes, confianca,
-    confirmar_persistencia, serie_contraste, status,
+    Climatologia, atende, avaliar_combinacoes, avaliar_niveis, confianca,
+    confirmar_persistencia, consolidar_persistencia_nivel, serie_contraste,
+    status,
 )
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -219,6 +220,20 @@ def analisar(cfg: dict, registros: List[dict]) -> List[dict]:
     for reg in registros:
         achados = avaliar_combinacoes(reg, alerta_cfg.get("combinacoes_relevantes"))
         reg["combinacoes"] = "; ".join(achados)
+
+    # Níveis só podem ser avaliados depois que todos os índices têm status.
+    avaliar_niveis(registros, alerta_cfg)
+    consolidar_persistencia_nivel(registros, alerta_cfg.get("exigir_persistencia", True))
+
+    # A área em hectares só é comparável quando quase toda a represa foi
+    # observada. Em cena encoberta o valor mede o que estava visível, não o
+    # reservatório — e exibido sem ressalva sugere que ele encolheu.
+    for reg in registros:
+        reg["area_confiavel"] = "SIM" if reg.get("confianca") == "ALTA" else "NAO"
+
+    n_vig = sum(1 for r in registros if r.get("nivel") == "VIGILANCIA")
+    n_con = sum(1 for r in registros if r.get("nivel_confirmado") == "SIM")
+    log.info("  níveis: %d em vigilância | %d confirmados", n_vig, n_con)
     return registros
 
 
