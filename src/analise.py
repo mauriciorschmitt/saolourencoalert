@@ -159,6 +159,93 @@ def avaliar_combinacoes(reg: dict, combinacoes: List[dict]) -> List[str]:
     return achados
 
 
+# ── níveis de alerta ───────────────────────────────────────────────────────
+
+NIVEIS = ("NORMAL", "VIGILANCIA", "CONFIRMADO")
+
+
+def _cobertura(reg: dict, chave: str = "area_cobertura_flutuante_ha"):
+    try:
+        return float(reg.get(chave))
+    except (TypeError, ValueError):
+        return None
+
+
+def avaliar_niveis(registros: Sequence[dict], cfg_alerta: dict) -> None:
+    """Atribui `nivel` a cada observação, in place.
+
+    São dois regimes distintos, e a separação é deliberada.
+
+    VIGILANCIA antecipa. Dispara quando o indicador precursor se afasta do
+    padrão histórico do mês enquanto o fenômeno ainda não é visível na área.
+    Tem valor preditivo modesto — na série de referência disparou seis vezes
+    e apenas uma precedeu um evento — e por isso sua saída é um convite a
+    verificar, não uma afirmação de que algo ocorrerá.
+
+    CONFIRMADO detecta. Exige que vários indicadores independentes concordem
+    na mesma passagem, em cena sem cobertura de nuvens. A concordância é o
+    que separa alteração real de artefato de uma banda específica: o NDVI
+    isolado produz 76 disparos na série; três índices concordando produzem
+    14, dos quais 13 pertencem ao evento conhecido.
+    """
+    vig = (cfg_alerta or {}).get("vigilancia") or {}
+    conf = (cfg_alerta or {}).get("confirmado") or {}
+
+    precursor = vig.get("indice_precursor", "ndci")
+    z_vig = float(vig.get("z_minimo", 2.0))
+    cob_max = vig.get("cobertura_maxima_ha")
+    conf_vig = vig.get("confianca_minima", "ALTA")
+    vig_ativa = bool(vig.get("ativa", True))
+
+    minimos = int(conf.get("indices_minimos", 3))
+    entre = list(conf.get("entre") or [])
+    conf_min = conf.get("confianca_minima", "ALTA")
+
+    for reg in registros:
+        confianca_reg = reg.get("confianca", "BAIXA")
+
+        # Nível 2 primeiro: confirmação prevalece sobre vigilância.
+        concordantes = [i for i in entre if reg.get(f"{i}_status") == "ALERTA"]
+        reg["indices_em_alerta"] = len(concordantes)
+        reg["indices_concordantes"] = ";".join(concordantes)
+
+        confirmado = (len(concordantes) >= minimos
+                      and atende(confianca_reg, conf_min))
+
+        # Nível 1: precursor acima do padrão com o fenômeno ainda discreto.
+        z = reg.get(f"{precursor}_z")
+        cob = _cobertura(reg)
+        vigilancia = False
+        if vig_ativa and not confirmado and atende(confianca_reg, conf_vig):
+            try:
+                acima = z is not None and z != "" and float(z) >= z_vig
+            except (TypeError, ValueError):
+                acima = False
+            discreto = cob_max is None or cob is None or cob <= float(cob_max)
+            vigilancia = acima and discreto
+
+        reg["nivel"] = ("CONFIRMADO" if confirmado
+                        else "VIGILANCIA" if vigilancia else "NORMAL")
+
+
+def consolidar_persistencia_nivel(registros: Sequence[dict],
+                                  exigir: bool = True) -> None:
+    """Confirma o nível CONFIRMADO em duas observações qualificadas seguidas.
+
+    Observações de confiança insuficiente são puladas: não confirmam nem
+    interrompem uma sequência, mas permanecem no histórico.
+    """
+    anterior = False
+    for reg in sorted(registros, key=lambda r: r.get("data", "")):
+        if not atende(reg.get("confianca", "BAIXA"), "ALTA"):
+            reg["nivel_confirmado"] = ""
+            continue
+        agora = reg.get("nivel") == "CONFIRMADO"
+        reg["nivel_confirmado"] = "SIM" if (agora and (not exigir or anterior)) else "NAO"
+        anterior = agora
+
+
+
 # ── contraste entre setores ────────────────────────────────────────────────
 
 def serie_contraste(serie_a: Sequence[dict], serie_b: Sequence[dict],
