@@ -74,6 +74,14 @@ h1{font-family:var(--serif);font-weight:400;font-size:clamp(28px,5vw,40px);
         font-style:normal}
 .c-alta{color:var(--algae)} .c-media{color:var(--silt)} .c-baixa{color:var(--alert)}
 
+.nivel{border-left:4px solid var(--line);padding:14px 0 14px 18px;margin:4px 0 22px}
+.nivel h3{margin:0 0 4px;font-family:var(--sans);font-size:15px;font-weight:600}
+.nivel p{margin:0;font-size:14px;color:var(--muted);max-width:66ch}
+.nivel.vigilancia{border-color:var(--silt)} .nivel.vigilancia h3{color:var(--silt)}
+.nivel.confirmado{border-color:var(--alert)} .nivel.confirmado h3{color:var(--alert)}
+.nivel .quando{font-size:12.5px;color:var(--muted);margin-top:6px}
+.area-ref{font-size:12.5px;color:var(--muted);margin-top:-10px}
+
 .aviso{border-left:3px solid var(--silt);padding:10px 0 10px 14px;
        font-size:13.5px;color:var(--muted);max-width:62ch}
 .aviso.grave{border-color:var(--alert)}
@@ -396,6 +404,36 @@ function ativarHover(){
   svg.addEventListener('touchend',sair);
 }
 
+// ── faixa de nível ─────────────────────────────────────────────────────────
+// O sistema opera em dois regimes. Vigilância antecipa: dispara quando o
+// precursor se afasta do padrão com o fenômeno ainda discreto. Confirmado
+// detecta: exige concordância entre indicadores independentes.
+function faixaNivel(linhas){
+  const recentes = [...linhas].reverse().slice(0, 12);
+  const conf = recentes.find(r=>r.nivel_confirmado==='SIM');
+  const vig  = recentes.find(r=>r.nivel==='VIGILANCIA');
+  const a = conf || vig;
+  if(!a) return '';
+
+  const ehConf = !!conf;
+  const idx = (a.indices_concordantes||'').split(';').filter(Boolean)
+    .map(i=>i.toUpperCase()).join(', ');
+
+  return `<div class="nivel ${ehConf?'confirmado':'vigilancia'}">
+    <h3>${ehConf ? 'Alerta confirmado' : 'Vigilância — condição atípica'}</h3>
+    <p>${ehConf
+      ? `Indicadores independentes (${idx}) acima do padrão histórico na mesma
+         passagem, em cena sem cobertura de nuvens. Recomenda-se verificação
+         de campo e registro fotográfico.`
+      : `Clorofila acima do padrão histórico do mês, com cobertura ainda
+         dentro do normal. Foi a condição observada cerca de dois meses antes
+         do evento de 2025 — mas, na mesma série, situação semelhante ocorreu
+         outras cinco vezes sem desdobramento. Vale uma verificação de campo,
+         não é previsão de evento.`}</p>
+    <p class="quando">Observado em ${dataBR(a.data)}.</p>
+  </div>`;
+}
+
 // ── aba de macrófitas: consome o sistema anterior ──────────────────────────
 // Nada é duplicado: a página lê os arquivos que aquele sistema já publica.
 // Se ele mudar de lugar ou sair do ar, esta aba degrada para um link.
@@ -575,10 +613,15 @@ function render(){
   const nomeConf = {alta:'Leitura confiável', media:'Leitura parcial',
                     baixa:'Leitura pouco confiável'}[conf] || 'Leitura';
 
+  // Área só é comparável em cena de alta confiança: numa passagem encoberta
+  // o número mede o pedaço que estava visível, não o reservatório. Exibido
+  // sem ressalva, sugere que a represa encolheu.
+  const refArea = [...linhas].reverse().find(r=>r.confianca==='ALTA') || u;
+  const areaAntiga = refArea.data !== u.data;
   const areas = Object.keys(CLS)
-    .filter(k=>u['area_'+k+'_ha'] !== undefined && u['area_'+k+'_ha'] !== '')
+    .filter(k=>refArea['area_'+k+'_ha'] !== undefined && refArea['area_'+k+'_ha'] !== '')
     .map(k=>`<div class="leitura">
-        <div class="valor num">${fmt(num(u['area_'+k+'_ha']),1)}<span>ha</span></div>
+        <div class="valor num">${fmt(num(refArea['area_'+k+'_ha']),1)}<span>ha</span></div>
         <div class="rot">${CLS[k]}</div></div>`).join('');
 
   let aviso = '';
@@ -626,11 +669,17 @@ function render(){
   </nav>
 
   <div id="conteudo-abas">${ESTADO.aba==='macro' ? '<p class="sub">Carregando…</p>' : `
+  ${faixaNivel(linhas)}
+
   <section class="estado">
     ${geo ? `<div class="mapa">${silhueta(geo, estreito()?150:240, estreito()?230:380)}</div>` : ''}
     <div class="leituras">
       <span class="selo c-${conf}"><i></i>${nomeConf}</span>
       <div style="display:flex;gap:40px;flex-wrap:wrap">${areas}</div>
+      ${areaAntiga ? `<p class="area-ref">Áreas medidas na última passagem
+        sem nuvens, em ${dataBR(refArea.data)}. A leitura mais recente, de
+        ${dataBR(u.data)}, cobriu apenas parte da represa e não permite
+        estimar área.</p>` : ''}
       ${aviso}
     </div>
   </section>
@@ -715,7 +764,10 @@ window.addEventListener('resize', ()=>{
 
     const geo = await tentar('setores.geojson');   // silhueta é opcional
 
-    ESTADO = {linhas, resumo, geo, indice: Object.keys(resumo.indices)[0]};
+    // Preserva o que já estava no estado — sobretudo `aba`. Recriar o
+    // objeto do zero apagava esse campo e a página abria na aba errada.
+    ESTADO = {...ESTADO, linhas, resumo, geo,
+              indice: Object.keys(resumo.indices)[0]};
     if(!ESTADO.indice) throw new Error(
       'O CSV não tem nenhuma coluna de índice reconhecida.');
     render();
