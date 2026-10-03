@@ -1,0 +1,92 @@
+name: Registrar observação de campo
+
+# Dispara quando uma issue de observação é aberta ou editada pelo
+# formulário em docs/campo.html. Converte a issue numa linha de
+# data/campo.csv e confirma na própria issue.
+
+on:
+  issues:
+    types: [opened, edited, labeled]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: publicacao-dados
+  cancel-in-progress: false
+
+jobs:
+  registrar:
+    # Só processa issues com o rótulo certo E abertas por quem tem acesso de
+    # escrita. Em repositório público qualquer pessoa abre issue; sem este
+    # filtro, qualquer um escreveria no arquivo de validação.
+    if: |
+      contains(github.event.issue.labels.*.name, 'observacao-campo') &&
+      (github.event.issue.author_association == 'OWNER' ||
+       github.event.issue.author_association == 'MEMBER' ||
+       github.event.issue.author_association == 'COLLABORATOR')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Converter issue em registro
+        id: reg
+        env:
+          CORPO:  ${{ github.event.issue.body }}
+          AUTOR:  ${{ github.event.issue.user.login }}
+          NUMERO: ${{ github.event.issue.number }}
+        run: |
+          python -m src.registrar_campo \
+            --corpo "$CORPO" --autor "$AUTOR" --issue "$NUMERO" \
+            | tee saida.txt
+          echo "resumo=$(tail -1 saida.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Publicar no repositório
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/campo.csv
+          if git diff --cached --quiet; then
+            echo "Observação já registrada anteriormente."
+            exit 0
+          fi
+          git commit -m "campo: observação da issue #${{ github.event.issue.number }} [skip ci]"
+          for t in 1 2 3 4 5; do
+            if git pull --rebase --autostash origin "${GITHUB_REF_NAME}" \
+               && git push origin "HEAD:${GITHUB_REF_NAME}"; then exit 0; fi
+            sleep $((t * 5))
+          done
+          echo "::error::Não foi possível publicar."; exit 1
+
+      - name: Confirmar na issue
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Registrada em \`data/campo.csv\`.\n\n${{ toJSON(steps.reg.outputs.resumo) }}\n\nA validação será recalculada no próximo monitoramento. Se anexar mais fotos, edite a issue — o registro é atualizado.`
+            });
+            await github.rest.issues.update({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, state: 'closed'
+            });
+
+      - name: Avisar recusa
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: 'Não consegui registrar esta observação. Veja o motivo no [log da execução](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) e edite a issue para corrigir.'
+            });
