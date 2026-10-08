@@ -5,7 +5,7 @@
     "uf": "SC",
     "timezone": "America/Sao_Paulo"
   },
-  "atualizado_em": "2026-10-05T18:49:51.770613+00:00",
+  "atualizado_em": "2026-10-08T16:56:40.526128+00:00",
   "ressalvas": [
     "Os índices são relativos e expressos como anomalia frente ao histórico. Sem amostragem de campo, não correspondem a concentrações.",
     "A correção atmosférica utilizada é destinada a superfícies terrestres e introduz incerteza adicional sobre água.",
@@ -59,7 +59,7 @@
       "id": "represa",
       "nome": "Represa (integral)",
       "principal": true,
-      "observacoes": 367
+      "observacoes": 368
     }
   ],
   "contrastes": []
