@@ -173,13 +173,15 @@ def email(assunto: str, mensagem: str, imagem: Optional[bytes] = None) -> None:
         log.error("Erro e-mail: %s", exc)
 
 
-def todos(assunto: str, mensagem: str, imagem: Optional[bytes] = None) -> None:
-    """Envia pelos canais configurados.
+def suprimido() -> bool:
+    """NOTIFICAR=0 suprime o envio — para executar manualmente, ou testar uma
+    alteração, sem disparar avisos para os destinatários."""
+    return os.environ.get("NOTIFICAR", "1").strip() == "0"
 
-    NOTIFICAR=0 suprime o envio — para executar manualmente, ou testar uma
-    alteração, sem disparar avisos para os destinatários.
-    """
-    if os.environ.get("NOTIFICAR", "1").strip() == "0":
+
+def todos(assunto: str, mensagem: str, imagem: Optional[bytes] = None) -> None:
+    """Envia pelos canais configurados, a menos que suprimido()."""
+    if suprimido():
         log.info("NOTIFICAR=0: avisos suprimidos nesta execução.")
         return
     telegram(mensagem, imagem)

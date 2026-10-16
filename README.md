@@ -16,8 +16,9 @@ A plataforma reúne dois módulos independentes sobre o mesmo reservatório:
 |---|---|---|
 | **Macrófitas** | Acompanha cobertura de vegetação flutuante por NDVI, gera painéis de imagem por data e envia os avisos | desde jul/2016 |
 | **Qualidade da água** | Sete índices espectrais, alerta em dois níveis e medição de área em hectares | desde jul/2016 |
+| **Radar** | Sentinel-1, atravessa nuvens: área com retroespalhamento típico de vegetação flutuante | desde jul/2016, com lacuna em 2022–2024 |
 
-Os dois rodam na mesma execução agendada, um depois do outro, e publicam
+Os três rodam na mesma execução agendada, um depois do outro, e publicam
 num único commit. Cada um mantém seu próprio arquivo de série; o aviso
 enviado por Telegram e e-mail reúne os dois.
 
@@ -30,6 +31,7 @@ enviado por Telegram e e-mail reúne os dois.
 | Execução agendada | segunda e quinta, 09:17 UTC (06:17 BRT) — o GitHub pode atrasar algumas horas |
 | Janela consultada | últimos 30 dias a cada execução: nenhuma passagem se perde, e reprocessar a mesma data apenas a sobrescreve |
 | Passagens do Sentinel-2 | a cada 2 a 5 dias; cenas totalmente encobertas são descartadas, então a série tem em média uma observação a cada 5 dias |
+| Passagens do Sentinel-1 (radar) | a cada 5 a 7 dias, com ou sem nuvem; só órbita descendente sobre Mafra |
 | Do satélite ao painel | até 3–4 dias, conforme o dia da passagem em relação à próxima execução |
 
 Para atualizar fora da agenda: aba **Actions** → *Monitoramento São
@@ -58,8 +60,9 @@ notificação e não produzem estimativa de área.
 e alimentam uma tabela de concordância que se acumula ao longo do tempo.
 
 **Aviso por Telegram e e-mail** a cada execução com cena aproveitável:
-leitura das macrófitas, painel de imagem e nível de alerta da qualidade da
-água. Vigilância ou alerta da água avisa mesmo quando a cena das macrófitas
+leitura das macrófitas, painel de imagem, status do radar e nível de alerta
+da qualidade da água. Alerta do radar, ou vigilância/alerta da água, avisa
+mesmo quando a cena das macrófitas
 é de baixa confiança.
 
 ---
@@ -95,6 +98,40 @@ mesma passagem, em cena de alta confiança, em duas observações consecutivas.
 A concordância é o que separa alteração real de artefato de uma banda
 específica: o NDVI isolado produz 76 disparos na série; três índices
 concordando produzem 14, dos quais 13 pertencem ao evento conhecido.
+
+---
+
+## Radar — através das nuvens
+
+Na estação chuvosa o Sentinel-2 chega a passar 20 dias sem uma cena
+aproveitável, justamente quando a infestação cresce. O Sentinel-1 é um radar:
+não depende de luz nem de céu limpo.
+
+Água parada funciona como um espelho e devolve pouco sinal ao satélite
+(polarização VH em torno de −25 dB). Uma camada de macrófitas espalha a onda
+e devolve muito mais (em torno de −18 dB). O módulo `src/radar.py` mede a
+fração da represa com VH acima de −20 dB, converte em hectares e compara com
+o padrão daquele mês.
+
+| | Água normal (2016–2021, 2026) | Evento de 2025 (ago–nov) |
+|---|---|---|
+| Área com VH > −20 dB | 15% ± 3% da represa | 72% |
+| Disparos com z ≥ 3 em duas passagens seguidas | nenhum em 374 passagens | confirmado em 31/05/2025 |
+
+O alerta confirmado do radar veio 12 dias antes do alerta óptico confirmado
+(12/06/2025). Na direção oposta, ele também serve de contraprova: a cena
+óptica limpa de 07/10/2026 classificou só 5,5 ha de lâmina d'água, mas o
+radar seguiu normal nas passagens de 05 e 12/10, o que indica turbidez, não
+macrófita.
+
+**Limitações.** O radar detecta vegetação já formada; o sinal precoce de
+clorofila, que antecede a infestação, só existe no módulo óptico. Sobre
+Mafra só há órbita descendente. Entre dezembro de 2021 e abril de 2025 quase
+não houve passagens, por causa da pane do Sentinel-1B, e a climatologia de
+referência usa portanto 2016–2021. Vento e vegetação das margens mantêm
+sempre alguns hectares de assinatura, mesmo com a represa limpa.
+
+Parâmetros e calibração em `config.yaml`, seção `radar`.
 
 ---
 
@@ -171,6 +208,7 @@ em medida.
 ├── src/
 │   ├── sentinelhub.py          autenticação (com renovação do token), consulta e recuo do polígono
 │   ├── notificacao.py          Telegram, e-mail e WhatsApp
+│   ├── radar.py                radar Sentinel-1 — vegetação flutuante através das nuvens
 │   ├── evalscripts.py          índices e máscaras de classificação
 │   ├── analise.py              climatologia, z-score, níveis, persistência
 │   ├── campo.py                validação contra observações de campo
@@ -186,7 +224,7 @@ em medida.
 └── .github/
     ├── workflows/
     │   ├── monitoramento.yml     os dois módulos — segundas e quintas
-    │   ├── serie_historica.yml   reconstrução da série (água, macrófitas ou ambos), manual
+    │   ├── serie_historica.yml   reconstrução da série (água, radar, macrófitas ou todos), manual
     │   ├── registrar_campo.yml   converte issue de campo em registro
     │   └── apurar.yml            apuração de indicadores, manual
     └── scripts/
@@ -230,7 +268,8 @@ export SH_CLIENT_ID=...  SH_CLIENT_SECRET=...
 
 python -m src.monitor                      # janela padrão de 30 dias
 python -m src.monitor --desde 2016-07-19   # série completa
-python monitor_ndvi.py                     # módulo de macrófitas
+python -m src.radar                        # radar, janela de 30 dias
+python monitor_ndvi.py                     # módulo de macrófitas e avisos
 ```
 
 Pelo navegador, sem instalar nada: aba **Actions**, escolha o fluxo e clique

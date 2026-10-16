@@ -216,6 +216,43 @@ alerta:
     - indices: ["ndci", "ndti"]
       rotulo: "Alteração da qualidade da água"
 
+# ── Radar (Sentinel-1) ─────────────────────────────────────────────────────
+# O radar enxerga através das nuvens: na estação chuvosa o óptico chega a
+# ficar 20 dias sem cena aproveitável, justamente quando a infestação cresce.
+#
+# Água parada é um espelho e devolve pouco sinal ao satélite (VH ≈ −25 dB).
+# Uma camada de macrófitas espalha a onda e devolve muito mais (≈ −18 dB).
+# A métrica é a fração da represa com VH acima do limiar, convertida em
+# hectares, comparada com o padrão daquele mês.
+#
+# Calibração sobre a série 2016–2026 (outubro de 2026):
+#   - em água normal, 15% ± 3% da represa passa de −20 dB (bordas, vento);
+#     no auge de 2025 foram 72%. Entre os limiares testados (−24 a −16 dB),
+#     −20 dB foi o que melhor separou os dois estados;
+#   - z ≥ 3 em duas passagens seguidas: nenhum disparo nas 374 passagens
+#     fora do evento; confirmou o evento em 31/05/2025, 12 dias antes do
+#     alerta óptico confirmado (12/06/2025);
+#   - a cena óptica de 07/10/2026 (lâmina d'água em 5,5 ha) não aparece no
+#     radar, que segue normal: indício de turbidez, não de macrófita.
+#
+# Limitações: sobre Mafra só há órbita descendente; entre dez/2021 e abr/2025
+# quase não há passagens (pane do Sentinel-1B). O radar detecta a vegetação
+# já formada — não substitui o sinal precoce de clorofila do módulo óptico.
+radar:
+  ativo: true
+  colecao: "sentinel-1-grd"
+  orbita: "DESCENDING"
+  limiar_vh_db: -20.0
+  filtro_speckle: {type: "LEE", windowSizeX: 3, windowSizeY: 3}
+  recuo_borda_m: 10        # mesmo recuo do módulo óptico
+  janela_dias: 30
+  chunk_dias: 180
+  fracao_minima: 0.5       # cena com menos da metade da represa é descartada
+  z_atencao: 2.0
+  z_alerta: 3.0
+  exigir_persistencia: true
+  setor: "represa"
+
 # ── Ressalvas obrigatórias ─────────────────────────────────────────────────
 # Reproduzidas na interface e nas notificações. Não são decorativas: sem
 # calibração local, estes índices são relativos, não concentrações.
