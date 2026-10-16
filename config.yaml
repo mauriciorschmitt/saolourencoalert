@@ -186,8 +186,9 @@ alerta:
 
   # ── Nível 1 · VIGILÂNCIA (antecipação) ──────────────────────────────────
   # Fundamento empírico: em 12/02/2025 a clorofila atingiu z = 5,1 com a
-  # cobertura ainda em 10 ha, dentro da faixa normal. A área só cruzou o
-  # limiar em 18/04 — 65 dias depois — e o pico veio em setembro.
+  # cobertura ainda em 10 ha, dentro da faixa normal. O NDVI confirmou
+  # alerta em 29/03 (45 dias depois), a cobertura passou de 30 ha em 12/06 e
+  # o pico veio em setembro.
   #
   # RESSALVA, e ela é importante: isso é UMA ocorrência. Na mesma série, a
   # clorofila disparou outras cinco vezes sem que surto algum se seguisse.
@@ -252,8 +253,8 @@ macrofitas:
 #     no auge de 2025 foram 72%. Entre os limiares testados (−24 a −16 dB),
 #     −20 dB foi o que melhor separou os dois estados;
 #   - z ≥ 3 em duas passagens seguidas: nenhum disparo nas 374 passagens
-#     fora do evento; confirmou o evento em 31/05/2025, 12 dias antes do
-#     alerta óptico confirmado (12/06/2025);
+#     fora do evento; confirmou o evento em 31/05/2025 (o NDVI com recuo
+#     confirma antes, em 29/03, quando há cena sem nuvem);
 #   - a cena óptica de 07/10/2026 (lâmina d'água em 5,5 ha) não aparece no
 #     radar, que segue normal: indício de turbidez, não de macrófita.
 #
@@ -305,7 +306,7 @@ clima:
 #   NORMAL      nenhum dos anteriores
 #
 # NDVI confirmado com o radar normal conta como VIGILÂNCIA, não ALERTA: os
-# dois alertas falsos da série (mar/2018, fev/2020) foram assim.
+# dois alertas falsos da série (mar/2018, jan/2020) foram assim.
 #
 # Só contam leituras recentes e de confiança suficiente. Sobe na hora; para
 # descer são exigidas 3 execuções seguidas no nível mais baixo (≈ 10 dias):
@@ -315,8 +316,9 @@ clima:
 alerta_unico:
   validade_dias: {radar: 21, agua: 30, macrofitas: 30}
   rebaixar_apos_execucoes: 3
-  # Vigilância da clorofila vale por este tempo após o último disparo: o
-  # sinal precoce antecedeu o evento de 2025 em ~65 dias.
+  # Vigilância da clorofila vale por este tempo após o último disparo: em
+  # 2025 o sinal precoce (12/02) antecedeu em 45 dias a confirmação do NDVI
+  # e em 4 meses a cobertura acima de 30 ha.
   memoria_vigilancia_dias: 60
   # Crescimento: inclinação da área no radar nas últimas 4 passagens
   # (até 35 dias), com a área já acima do esperado (z ≥ 1). Na série,

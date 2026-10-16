@@ -81,6 +81,16 @@ def _csv(nome: str) -> List[dict]:
         return []
 
 
+def _historico_macrofitas() -> List[dict]:
+    """historico.csv do módulo de macrófitas, que usa `date` em vez de `data`."""
+    try:
+        with open(DADOS / "historico.csv", encoding="utf-8", newline="") as f:
+            return sorted((r for r in csv.DictReader(f) if r.get("date")),
+                          key=lambda r: r["date"])
+    except OSError:
+        return []
+
+
 def _num(v) -> Optional[float]:
     try:
         return float(v)
@@ -131,7 +141,7 @@ def fonte_agua(linhas: List[dict], validade: int, hoje: dt.date,
                 "nivel": "NORMAL", "texto": "sem cena limpa"}
     u = limpas[-1]
     n = u.get("nivel") or "NORMAL"
-    # A vigilância da clorofila antecipou o evento de 2025 em ~65 dias, e por
+    # A vigilância da clorofila antecipou o evento de 2025 em 45 dias, e por
     # definição some quando a cobertura passa de 30 ha — exatamente quando a
     # infestação aparece, mas antes de os índices a confirmarem. Por isso ela
     # vale por `memoria_dias` depois do último disparo, não só na cena dele.
@@ -155,7 +165,14 @@ def fonte_agua(linhas: List[dict], validade: int, hoje: dt.date,
             "texto": motivo, "indices": u.get("indices_concordantes") or ""}
 
 
-def fonte_macrofitas(ultimo: Optional[dict], validade: int, hoje: dt.date) -> dict:
+def fonte_macrofitas(historico: List[dict], validade: int, hoje: dt.date) -> dict:
+    # A leitura que vale é a última cena QUALIFICADA (confiança média ou
+    # alta) do histórico — não a de ultimo.json, que é a de menos nuvem nos
+    # últimos 30 dias. Em 29/03/2025 o NDVI confirmou o alerta numa cena com
+    # 38% de nuvem enquanto a "melhor" do período seguia sendo a de 09/03,
+    # normal: lido pelo ultimo.json, o alerta nunca chegaria ao semáforo.
+    qualificadas = [r for r in historico if (r.get("confianca") or "BAIXA") != "BAIXA"]
+    ultimo = qualificadas[-1] if qualificadas else None
     if not ultimo:
         return {"id": "macrofitas", "nome": "Macrófitas (NDVI)", "valida": False,
                 "nivel": "NORMAL", "texto": "sem leitura"}
@@ -209,7 +226,7 @@ def combinar(fontes: List[dict], cresc: Optional[dict]) -> Tuple[str, List[str]]
     por_id = {f["id"]: f for f in fontes}
     radar, macro = por_id.get("radar"), por_id.get("macrofitas")
     # NDVI confirmado com o radar normal na mesma época: na série 2016–2024
-    # foram dois alertas falsos (mar/2018, fev/2020), ambos com o radar
+    # foram dois alertas falsos (mar/2018, jan/2020), ambos com o radar
     # normal. Sem radar válido, o NDVI decide sozinho.
     if (macro and macro["valida"] and macro["nivel"] == "ALERTA"
             and radar and radar["valida"] and radar["nivel"] == "NORMAL"):
@@ -236,7 +253,7 @@ def calcular(cfg: dict, hoje: dt.date) -> dict:
         fonte_radar(radar, val["radar"], hoje),
         fonte_agua(_csv("represa.csv"), val["agua"], hoje,
                    au.get("memoria_vigilancia_dias", 60)),
-        fonte_macrofitas(_json("ultimo.json"), val["macrofitas"], hoje),
+        fonte_macrofitas(_historico_macrofitas(), val["macrofitas"], hoje),
     ]
     cresc = crescimento(radar, au["crescimento"]) if radar else None
     nivel, motivos = combinar(fontes, cresc)
