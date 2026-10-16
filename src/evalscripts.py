@@ -49,9 +49,18 @@ FORMULAS: Dict[str, str] = {
 }
 
 
-def _js_mask_expr(indice: str, limiar: float, operador: str) -> str:
-    op = ">" if operador == "maior" else "<"
-    return f"(({indice}) {op} {limiar}) ? 1 : 0"
+def condicoes(cfg: dict) -> List[dict]:
+    """Uma classificação é uma condição ({indice, limiar, operador}) ou
+    várias que precisam valer ao mesmo tempo ({condicoes: [...]}). A forma
+    combinada existe porque um índice sozinho confunde alvos: o FAI sobe
+    tanto com vegetação flutuante quanto com água barrenta."""
+    return cfg["condicoes"] if "condicoes" in cfg else [cfg]
+
+
+def _js_mask_expr(cfg: dict) -> str:
+    partes = [f"(({c['indice']}) {'>' if c['operador'] == 'maior' else '<'} {c['limiar']})"
+              for c in condicoes(cfg)]
+    return f"({' && '.join(partes)}) ? 1 : 0"
 
 
 def build_evalscript(indices: List[str], classificacoes: Dict[str, dict]) -> str:
@@ -75,12 +84,13 @@ def build_evalscript(indices: List[str], classificacoes: Dict[str, dict]) -> str
     # inclusive pelas máscaras de classificação.
     calc = "\n".join(
         f"  const {nome} = {FORMULAS[nome]};" for nome in
-        sorted(set(indices) | {c["indice"] for c in classificacoes.values()})
+        sorted(set(indices) | {c["indice"] for cfg in classificacoes.values()
+                               for c in condicoes(cfg)})
     )
 
     retornos = [f'    {nome}: [{nome}]' for nome in indices]
     for nome, cfg in classificacoes.items():
-        expr = _js_mask_expr(cfg["indice"], cfg["limiar"], cfg["operador"])
+        expr = _js_mask_expr(cfg)
         retornos.append(f'    cls_{nome}: [{expr}]')
     retornos.append("    dataMask: [valid]")
 

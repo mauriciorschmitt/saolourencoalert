@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 import requests
+import yaml
 from pyproj import Transformer
 
 from src import notificacao, sentinelhub as sh
@@ -59,9 +60,22 @@ log = logging.getLogger("monitor_ndvi")
 
 SCHEMA_VERSION = "3.0"
 
+# ── Área de interesse e recuo (config.yaml, seção `macrofitas`) ─────────────
+# Mesmo polígono e mesmo recuo do módulo de qualidade da água: descartar o
+# anel de pixels da margem tira a vegetação ripária da média. Até out/2026 o
+# módulo usava o polígono inteiro (recuo 0); essa série está preservada em
+# docs/data/historico_sem_recuo.csv.
+with open(Path(__file__).parent / "config.yaml", encoding="utf-8") as _f:
+    _CFG = yaml.safe_load(_f)
+_MACRO = _CFG.get("macrofitas") or {}
+RECUO_BORDA_M = float(_MACRO.get("recuo_borda_m", 0))
+
 # Climatologia mensal de referência (período pré-surto, 2016-2024).
-# Copie estes valores da planilha Salvinia_Outbreak_Statistical_Results.xlsx,
-# aba Monthly_Climatology (colunas ndvi_clim_mean e ndvi_clim_sd).
+# Lida de data/climatologia_macrofitas.json, que backfill_historico.py gera
+# a partir da própria série (cenas de confiança ALTA no período de
+# referência de config.yaml). Os valores abaixo são os do artigo, para o
+# polígono sem recuo, e só valem se o arquivo não existir.
+CLIMATOLOGY_PATH = Path(__file__).parent / "data" / "climatologia_macrofitas.json"
 MONTHLY_CLIMATOLOGY = {
     1:  {"mean":  0.062983286, "sd": 0.022422375},
     2:  {"mean":  0.102973448, "sd": 0.056671219},
@@ -76,6 +90,9 @@ MONTHLY_CLIMATOLOGY = {
     11: {"mean":  0.079915785, "sd": 0.091192902},
     12: {"mean":  0.017970982, "sd": 0.152124159},
 }
+if CLIMATOLOGY_PATH.exists():
+    _clim = json.loads(CLIMATOLOGY_PATH.read_text(encoding="utf-8"))
+    MONTHLY_CLIMATOLOGY = {int(m): v for m, v in _clim["meses"].items()}
 
 ROI_PATH = Path(__file__).parent / "data" / "roi.geojson"
 with open(ROI_PATH, "r", encoding="utf-8") as _f:
@@ -114,9 +131,9 @@ NOTIFY_MIN_CONFIDENCE = "MEDIA"
 ALERT_REQUIRE_PERSISTENCE = True
 
 # Pixels dentro do polígono (não da bounding box). Ver artigo, Seção 2.2.
-# Para recalibrar: rode com MIN_VALID_FRACTION=0.001, colete os maiores
-# valores de valid_px em datas visivelmente sem nuvem e use o maior.
-GEOMETRY_PIXEL_COUNT = 8761
+# Depende do recuo: 8761 sem recuo, 7334 com 10 m (o mesmo que o módulo de
+# qualidade da água observa em céu limpo). Fica em config.yaml junto do recuo.
+GEOMETRY_PIXEL_COUNT = int(_MACRO.get("pixels_referencia", 8761))
 
 HTTP_MAX_RETRIES = 4
 HTTP_BACKOFF_BASE = 2  # segundos (dobra a cada tentativa)
@@ -328,7 +345,7 @@ def fetch_all_scenes(cred: sh.Credencial) -> list[dict]:
     today = dt.date.today()
     start = today - dt.timedelta(days=LOOKBACK_DAYS)
     roi_wgs84 = ROI_GEOJSON["features"][0]["geometry"]
-    roi_utm, epsg = reproject_to_utm(roi_wgs84)
+    roi_utm, epsg = sh.reprojetar_utm(roi_wgs84, RECUO_BORDA_M)
 
     log.info("Consultando API Estatística (%s → %s)...", start, today)
     payload = {

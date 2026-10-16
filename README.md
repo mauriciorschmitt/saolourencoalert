@@ -75,8 +75,8 @@ Dispara quando a clorofila relativa se afasta do padrão histórico do mês
 enquanto a cobertura ainda está dentro do normal.
 
 O fundamento é empírico: em 12/02/2025 o NDCI atingiu z = 5,1 com a
-cobertura em 10 ha. A área só cruzou o limiar em 18/04 — 65 dias depois — e
-o pico veio em setembro.
+cobertura em 10 ha. O NDVI só confirmou alerta em 29/03 — 45 dias depois —,
+a cobertura passou de 30 ha em 12/06 e o pico veio em setembro (72 ha).
 
 **Ressalva, e ela importa.** Isso é *uma* ocorrência. Na mesma série de dez
 anos a clorofila disparou outras cinco vezes sem que surto algum se
@@ -119,13 +119,14 @@ de confiança suficiente.
 
 **Reproduzido sobre a série 2016–2026**, execução a execução:
 
-- evento de 2025: **Vigilância contínua desde 13/02/2025** e Alerta em
-  26/05/2025, mais de três meses de antecedência;
-- nenhum Alerta fora do evento. Os dois que haveria (mar/2018, fev/2020)
+- evento de 2025: **Vigilância desde 13/02/2025** e **Alerta em
+  31/03/2025**, quando o NDVI confirmou; a cobertura só passou de 30 ha em
+  junho e o pico veio em setembro;
+- nenhum Alerta fora do evento. Os dois que haveria (mar/2018, jan/2020)
   vinham só do NDVI, com o radar normal, e por isso ficam como Vigilância;
 - 8 Vigilâncias sem evento em seguida, cerca de 2 meses cada. É o preço da
   antecipação: o sinal da clorofila acerta cerca de 1 em 6;
-- 23 mudanças de nível em 10 anos.
+- 25 mudanças de nível em 10 anos.
 
 ### Avisos
 
@@ -167,11 +168,12 @@ o padrão daquele mês.
 | Área com VH > −20 dB | 15% ± 3% da represa | 72% |
 | Disparos com z ≥ 3 em duas passagens seguidas | nenhum em 374 passagens | confirmado em 31/05/2025 |
 
-O alerta confirmado do radar veio 12 dias antes do alerta óptico confirmado
-(12/06/2025). Na direção oposta, ele também serve de contraprova: a cena
-óptica limpa de 07/10/2026 classificou só 5,5 ha de lâmina d'água, mas o
-radar seguiu normal nas passagens de 05 e 12/10, o que indica turbidez, não
-macrófita.
+O radar confirmou o evento em 31/05/2025. Quando há cena aproveitável, o
+NDVI óptico — depois do recuo da margem — confirma antes (29/03/2025); o
+radar cobre os períodos encobertos e serve de contraprova. Foi contra ele
+que a classificação óptica foi recalibrada (ver *Área de interesse e
+classificação*): a cena limpa de 07/10/2026, que a regra antiga lia como
+52 ha de cobertura flutuante, era água barrenta, e o radar seguiu normal.
 
 **Limitações.** O radar detecta vegetação já formada; o sinal precoce de
 clorofila, que antecede a infestação, só existe no módulo óptico. Sobre
@@ -206,7 +208,7 @@ normal para dezembro.
 
 ---
 
-## Área de interesse
+## Área de interesse e classificação
 
 Polígono digitalizado manualmente sobre imagem de alta resolução, com 502
 vértices e 79,49 ha.
@@ -215,6 +217,31 @@ Antes do processamento aplica-se um **recuo de 10 m** — exatamente um pixel.
 Isso descarta o anel que mistura água e margem dentro do mesmo pixel, onde
 vegetação ripária eleva os índices sem que nada tenha ocorrido na lâmina
 d'água. A área efetiva cai para 65,10 ha, 7.334 pixels após rasterização.
+
+Os três módulos usam o mesmo polígono e o mesmo recuo. O de macrófitas
+passou a usá-lo em out/2026: com a margem incluída, o NDVI de referência da
+represa ficava em torno de +0,06; sem ela, em torno de −0,15. A série
+antiga, sem recuo, está preservada em `docs/data/historico_sem_recuo.csv`,
+e a climatologia passou a ser derivada da própria série
+(`data/climatologia_macrofitas.json`) em vez de copiada da planilha do
+artigo. Com isso o NDVI confirmou o evento de 2025 em 29/03, cinco semanas
+antes do que confirmava sem o recuo (03/05).
+
+### Classificação em hectares
+
+Os limiares que convertem índice em área foram calibrados contra o radar,
+sobre 124 pares de cena óptica limpa e passagem de radar com até 3 dias:
+
+| Cobertura flutuante | correlação com o radar | erro médio | anos normais |
+|---|---|---|---|
+| FAI > 0,02 (regra antiga) | 0,73 | 6,7 ha | 12,6 ± 12,6 ha |
+| **NDVI > 0,2 e FAI > 0,02** | **0,89** | **4,7 ha** | 9,1 ± 6,3 ha |
+| radar (referência) | — | — | 10,6 ± 2,3 ha |
+
+A regra antiga confundia água barrenta com vegetação, porque o FAI sobe com
+sedimento em suspensão; exigir NDVI > 0,2 junto separa planta de sedimento.
+A lâmina d'água passou de NDWI > 0, que em cenas limpas marcava quase nada
+de água, para NDVI < 0,1.
 
 Recuos maiores desconectam os braços estreitos: a partir de 15 m o polígono
 se fragmenta em cinco partes.
@@ -356,11 +383,11 @@ anomalia a jusante de um ponto suspeito é indício técnico que justifica
 investigação — não é prova de origem, e apresentá-la como tal enfraquece
 qualquer encaminhamento formal.
 
-**Limiares de classificação por calibrar.** Os cortes que convertem índice
-em hectares são absolutos, não se ajustam ao histórico. Em anos sem evento o
-sistema estima de 3,6 a 7,7 ha de cobertura flutuante, valor que
-provavelmente reflete pixels de borda. É a calibração pendente de maior
-impacto.
+**Limiares calibrados contra outro satélite, não contra o campo.** A
+classificação em hectares foi ajustada para concordar com o radar, que também
+tem erro: vento e margem mantêm cerca de 10 ha de assinatura mesmo com a
+represa limpa. A floração (NDCI) não foi recalibrada, por falta de
+referência. Observações de campo continuam sendo a validação que falta.
 
 **Pixels mistos.** O reservatório tem perímetro 4,6 vezes maior que o de um
 círculo de área equivalente. Mesmo após o recuo, a proporção de pixels que

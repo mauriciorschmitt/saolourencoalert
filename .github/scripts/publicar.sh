@@ -13,7 +13,12 @@ mensagem="$1"; shift
 git config user.name  "github-actions[bot]"
 git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-git add -- "$@"
+# Caminho inexistente faria o git add inteiro falhar e nada ser publicado.
+existentes=()
+for caminho in "$@"; do
+  [ -e "$caminho" ] && existentes+=("$caminho")
+done
+[ ${#existentes[@]} -gt 0 ] && git add -- "${existentes[@]}"
 if git diff --cached --quiet; then
   echo "Nada mudou — nenhum commit necessário."
   exit 0

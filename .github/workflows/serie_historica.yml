@@ -24,6 +24,10 @@ on:
         description: "Qualidade da água: setor específico — em branco processa todos"
         required: false
         default: ""
+      substituir:
+        description: "Macrófitas: descartar a série atual e recalcular a climatologia (após mudar polígono, recuo ou máscara)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -45,6 +49,7 @@ jobs:
       DESDE:  ${{ inputs.desde }}
       ATE:    ${{ inputs.ate }}
       SETOR:  ${{ inputs.setor }}
+      SUBSTITUIR: ${{ inputs.substituir }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -68,6 +73,7 @@ jobs:
         run: |
           ARGS=(--since "$DESDE")
           [ -n "$ATE" ] && ARGS+=(--until "$ATE")
+          [ "$SUBSTITUIR" = "true" ] && ARGS+=(--substituir)
           python backfill_historico.py "${ARGS[@]}"
 
       - name: Radar Sentinel-1
@@ -81,4 +87,4 @@ jobs:
         run: >-
           bash .github/scripts/publicar.sh
           "dados: reconstrói série histórica (${{ inputs.modulo }}) [skip ci]"
-          docs/data
+          docs/data data/climatologia_macrofitas.json
