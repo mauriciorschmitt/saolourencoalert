@@ -10,10 +10,10 @@
     "cdom": 1.114812,
     "ndwi": 0.081609,
     "ndmi": 0.067998,
-    "frac_agua": 0.6667,
-    "area_agua_ha": 1.64,
-    "frac_cobertura_flutuante": 0.2805,
-    "area_cobertura_flutuante_ha": 0.69,
+    "frac_agua": 0.748,
+    "area_agua_ha": 1.84,
+    "frac_cobertura_flutuante": 0.0935,
+    "area_cobertura_flutuante_ha": 0.23,
     "frac_floracao": 0.122,
     "area_floracao_ha": 0.3,
     "fracao_valida": 0.0335,
@@ -41,7 +41,7 @@
     "nivel_confirmado": "",
     "area_confiavel": "NAO"
   },
-  "atualizado_em": "2026-10-16T19:06:24.062751+00:00",
+  "atualizado_em": "2026-10-16T20:05:31.076107+00:00",
   "ressalvas": [
     "Os índices são relativos e expressos como anomalia frente ao histórico. Sem amostragem de campo, não correspondem a concentrações.",
     "A correção atmosférica utilizada é destinada a superfícies terrestres e introduz incerteza adicional sobre água.",
