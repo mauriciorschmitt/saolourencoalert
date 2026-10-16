@@ -22,9 +22,8 @@ O que este script faz em cada execução
       docs/data/passagens_30d.json   → TODAS as cenas do período + flag "best"
       docs/images/latest/panel.png   → painel da melhor cena
       docs/images/archive/YYYY-MM-DD/panel.png → arquivo por data
-6.  Envia notificações via Telegram, e-mail e/ou WhatsApp (CallMeBot),
-    incluindo o nível de alerta do módulo de qualidade da água, que roda
-    antes no mesmo workflow (docs/data/represa_ultimo.json).
+6.  Não envia avisos: isso é feito por src/alerta.py, que roda depois e
+    junta este módulo aos de água, radar e clima num nível único.
 7.  Todas as chamadas HTTP têm retry com backoff exponencial.
 """
 
@@ -41,7 +40,6 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 import requests
-import yaml
 from pyproj import Transformer
 
 from src import notificacao, sentinelhub as sh
@@ -127,7 +125,6 @@ SH_TOKEN_URL   = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/prot
 SH_STATS_URL   = "https://sh.dataspace.copernicus.eu/api/v1/statistics"
 SH_PROCESS_URL = "https://sh.dataspace.copernicus.eu/api/v1/process"
 PANEL_IMAGE_SIZE = 512
-PANEL_URL = "mauriciorschmitt.github.io/saolourencoalert"  # exibido nas notificações
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 2. EVALSCRIPTS (inalterados — mesma matemática de bandas do artigo)
@@ -740,96 +737,13 @@ def save_all(scenes: list[dict], best: dict, z: float, run_id: str) -> dict:
 # 10. NOTIFICAÇÕES
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# O envio em si fica em src/notificacao.py. Os nomes abaixo são mantidos
-# para não quebrar quem já os importava.
+# O aviso não sai mais daqui: src/alerta.py roda por último no workflow, junta
+# macrófitas, água, radar e clima num nível único e decide se avisa. Os nomes
+# abaixo são mantidos para não quebrar quem já os importava, e para o aviso
+# de falha crítica no fim deste arquivo.
 send_telegram = notificacao.telegram
 send_whatsapp = notificacao.whatsapp
 send_email    = notificacao.email
-
-
-# ── Resumo do módulo de qualidade da água ────────────────────────────────────
-# O módulo de água roda antes, no mesmo workflow, e grava a última observação
-# em represa_ultimo.json. Ler esse arquivo é o que põe os dois módulos num
-# único aviso, sem que um importe a lógica do outro. Se o módulo de água
-# falhou nesta execução, o arquivo é o da execução anterior: a data exibida
-# deixa isso visível.
-
-AGUA_JSON   = Path(__file__).parent / "docs" / "data" / "represa_ultimo.json"
-CONFIG_YAML = Path(__file__).parent / "config.yaml"
-
-def _num(v) -> Optional[float]:
-    try:
-        return float(v)
-    except (TypeError, ValueError):
-        return None
-
-def resumo_agua() -> Tuple[str, bool]:
-    """Texto para a notificação e se o nível exige aviso por si só
-    (VIGILANCIA ou CONFIRMADO)."""
-    try:
-        obs = json.loads(AGUA_JSON.read_text(encoding="utf-8"))["observacao"]
-    except (OSError, ValueError, KeyError) as exc:
-        log.warning("Resumo da qualidade da água indisponível: %s", exc)
-        return "", False
-    try:
-        alerta_cfg = yaml.safe_load(CONFIG_YAML.read_text(encoding="utf-8"))["alerta"]
-    except (OSError, ValueError, KeyError, TypeError):
-        alerta_cfg = {}
-
-    nivel      = obs.get("nivel") or "NORMAL"
-    confirmado = obs.get("nivel_confirmado") == "SIM"
-    emoji  = {"CONFIRMADO": "🚨", "VIGILANCIA": "👀"}.get(nivel, "✅")
-    rotulo = {"CONFIRMADO": "ALERTA CONFIRMADO" if confirmado
-                            else "ALERTA (aguardando 2ª passagem)",
-              "VIGILANCIA": "VIGILÂNCIA"}.get(nivel, "NORMAL")
-
-    linhas = [f"💧 Qualidade da água — {obs.get('data', '?')}",
-              f"{emoji} Nível: {rotulo}  (confiança {obs.get('confianca', '?')})"]
-    agua = _num(obs.get("area_agua_ha"))
-    cob  = _num(obs.get("area_cobertura_flutuante_ha"))
-    if obs.get("area_confiavel") == "SIM" and agua is not None and cob is not None:
-        linhas.append(f"📐 Lâmina d'água {agua:.1f} ha | cobertura flutuante {cob:.1f} ha")
-    if nivel != "NORMAL" and obs.get("indices_concordantes"):
-        indices = obs["indices_concordantes"].replace(";", ", ").upper()
-        linhas.append(f"📈 Índices acima do padrão: {indices}")
-
-    chave = {"CONFIRMADO": "confirmado", "VIGILANCIA": "vigilancia"}.get(nivel)
-    mensagem = ((alerta_cfg.get(chave) or {}).get("mensagem") or "").strip() if chave else ""
-    if mensagem:
-        linhas.append(f"ℹ️ {mensagem}")
-    return "\n".join(linhas) + "\n", nivel in ("CONFIRMADO", "VIGILANCIA")
-
-
-# ── Resumo do radar (Sentinel-1) ─────────────────────────────────────────────
-# Mesmo arranjo do bloco da água: src.radar roda antes no workflow e grava
-# radar_ultimo.json. O radar atravessa nuvens, então costuma ter passagem
-# mais recente que a melhor cena óptica.
-
-RADAR_JSON = Path(__file__).parent / "docs" / "data" / "radar_ultimo.json"
-
-def resumo_radar() -> Tuple[str, bool]:
-    """Texto para a notificação e se o radar exige aviso por si só (ALERTA)."""
-    try:
-        obs = json.loads(RADAR_JSON.read_text(encoding="utf-8"))["observacao"]
-    except (OSError, ValueError, KeyError) as exc:
-        log.warning("Resumo do radar indisponível: %s", exc)
-        return "", False
-    st_radar   = obs.get("frac_vegetacao_status") or "SEM_REFERENCIA"
-    confirmado = obs.get("frac_vegetacao_confirmado") == "SIM"
-    emoji  = {"ALERTA": "🚨", "ATENCAO": "⚠️"}.get(st_radar, "✅")
-    rotulo = {"ALERTA": "ALERTA CONFIRMADO" if confirmado
-                        else "ALERTA (aguardando 2ª passagem)",
-              "ATENCAO": "ATENÇÃO"}.get(st_radar, st_radar.replace("_", " "))
-    area, z = _num(obs.get("area_vegetacao_ha")), _num(obs.get("frac_vegetacao_z"))
-    linhas = [f"📡 Radar (atravessa nuvens) — {obs.get('data', '?')}",
-              f"{emoji} Status: {rotulo}"]
-    if area is not None:
-        linhas.append(f"🌿 Assinatura de vegetação: {area:.1f} ha"
-                      + (f" (z = {z:.1f})" if z is not None else ""))
-    if st_radar == "ALERTA":
-        linhas.append("ℹ️ Retroespalhamento típico de vegetação flutuante muito acima "
-                      "do padrão do mês. Recomenda-se verificação de campo.")
-    return "\n".join(linhas) + "\n", st_radar == "ALERTA"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 11. SMOKE TEST
@@ -844,16 +758,7 @@ def smoke_test():
             f"Secrets obrigatórios não configurados: {', '.join(missing)}. "
             "Configure em Settings > Secrets and variables > Actions no GitHub."
         )
-    active = notificacao.canais_ativos()
-    if notificacao.suprimido():
-        log.info("Smoke test: NOTIFICAR=0, canais não são exigidos.")
-        return
-    if not active:
-        raise EnvironmentError(
-            "Nenhum canal de notificação configurado. "
-            "Configure pelo menos Telegram, e-mail ou WhatsApp nos secrets."
-        )
-    log.info("Smoke test OK. Canais ativos: %s", ", ".join(active))
+    log.info("Smoke test OK.")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 12. MAIN
@@ -867,19 +772,12 @@ def main():
 
     cred   = credencial()
     scenes = fetch_all_scenes(cred)
-    agua_txt, agua_relevante = resumo_agua()
-    radar_txt, radar_relevante = resumo_radar()
 
     if not scenes:
-        msg = (
-            f"[São Lourenço] Nenhuma imagem Sentinel-2 com pixels válidos "
-            f"foi encontrada nos últimos {LOOKBACK_DAYS} dias.\n"
-        )
-        for bloco in (radar_txt, agua_txt):
-            if bloco:
-                msg += "\n" + bloco
-        log.warning(msg)
-        notificacao.todos("Monitoramento São Lourenço – sem imagem", msg)
+        # Sem cena nova, ultimo.json fica como está e envelhece: o nível único
+        # deixa de considerá-lo quando passa da validade.
+        log.warning("Nenhuma imagem Sentinel-2 com pixels válidos nos últimos "
+                    "%d dias. Dados anteriores mantidos.", LOOKBACK_DAYS)
         return
 
     best        = next(s for s in scenes if s["best"])
@@ -901,74 +799,10 @@ def main():
             save_panel_bytes(panel, sc["date"], is_best=False)
 
     # Persiste todos os dados (atualiza has_image depois de gerar imagens)
-    payload    = save_all(scenes, best, z, run_id)
-    status     = payload["status"]
-    confianca  = payload["confianca"]
-    confirmado = payload["alerta_confirmado"] == "SIM"
-
-    emoji = {"ALERTA": "🚨", "ATENÇÃO": "⚠️", "NORMAL": "✅"}.get(status, "ℹ️")
-    selo  = {"ALTA": "🟢", "MEDIA": "🟡", "BAIXA": "🔴"}.get(confianca, "")
-    n_cenas = len(scenes)
-    message = (
-        f"🛰️ Monitoramento São Lourenço\n"
-        f"📅 Melhor cena: {best['date']}\n"
-        f"🌿 NDVI:    {best['ndvi']:.3f}\n"
-        f"💧 NDWI:    {best['ndwi']:.3f}\n"
-        f"🌱 NDMI:    {best['ndmi']:.3f}\n"
-        f"☁️ Nuvens:  {best['cloud_pct']:.1f}%\n"
-        f"👁️ Área observada: {best['valid_fraction'] * 100:.1f}%\n"
-        f"📊 Z-score: {z:.2f}\n"
-        f"{emoji} Status: {status}\n"
-        f"{selo} Confiança: {confianca}\n"
-        f"🔍 Passagens no período: {n_cenas} "
-        f"(veja todas em {PANEL_URL})\n"
-    )
-    if confianca != "ALTA":
-        message += (
-            f"⚠️ Leitura obtida sobre {best['valid_fraction'] * 100:.0f}% da represa. "
-            f"Nuvem residual tende a elevar o NDVI — valor indicativo.\n"
-        )
-    if is_alert and confirmado:
-        message += (
-            "⚠️ Anomalia CONFIRMADA em duas passagens consecutivas — "
-            "recomenda-se verificação de campo.\n"
-        )
-    elif is_alert:
-        message += (
-            "🔎 Anomalia detectada nesta passagem, ainda NÃO confirmada: "
-            "a observação qualificada anterior estava dentro do normal. "
-            "Aguardando a próxima passagem para confirmar ou descartar.\n"
-        )
-
-    for bloco in (radar_txt, agua_txt):
-        if bloco:
-            message += "\n" + bloco
-
-    log.info("Mensagem composta:\n%s", message)
-
-    # Observações de baixa confiança continuam gravadas e visíveis no painel,
-    # mas não disparam push: alerta falso recorrente faz o destinatário parar
-    # de olhar os alertas verdadeiros. Vigilância ou alerta da qualidade da
-    # água avisa mesmo assim: esses níveis já exigem cena de confiança ALTA.
-    # Alerta do radar também: ele não depende de céu limpo, e é justamente
-    # com a represa encoberta que o óptico ficaria calado.
-    if _should_notify(confianca) or agua_relevante or radar_relevante:
-        log.info("Alerta confirmado por persistência: %s", confirmado)
-        assunto = f"Monitoramento São Lourenço – {status}"
-        if radar_relevante:
-            assunto += " | radar: ALERTA"
-        if agua_relevante:
-            assunto += " | água: atenção"
-        notificacao.todos(assunto, message, best_panel)
-    else:
-        log.info(
-            "Notificação suprimida: confiança %s abaixo do corte %s "
-            "(área observada %.1f%%). Dados gravados normalmente.",
-            confianca, NOTIFY_MIN_CONFIDENCE, best["valid_fraction"] * 100,
-        )
-
+    payload = save_all(scenes, best, z, run_id)
     log.info("=== Execução concluída  run_id=%s  status=%s  confiança=%s  "
-             "confirmado=%s ===", run_id, status, confianca, confirmado)
+             "confirmado=%s ===", run_id, payload["status"], payload["confianca"],
+             payload["alerta_confirmado"])
 
 
 if __name__ == "__main__":

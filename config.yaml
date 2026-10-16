@@ -253,6 +253,68 @@ radar:
   exigir_persistencia: true
   setor: "represa"
 
+# ── Condições ambientais (Open-Meteo) ──────────────────────────────────────
+# Contexto, não alerta: chuva e calor não indicam infestação, mas mudam a
+# chance de ela acontecer. Chuva forte carrega nutrientes da bacia para a
+# represa; calor acelera o crescimento das macrófitas flutuantes.
+#
+# Observado em um único evento, e por isso tratado como hipótese: antes do
+# surto de 2025 houve chuva muito acima do normal em dez/2024 (+2,1σ) e um
+# fim de verão quente em fev–mar/2025 (+1,3σ e +1,7σ).
+clima:
+  ativo: true
+  latitude: -26.179        # centro da represa
+  longitude: -49.893
+  normais_inicio: "2016-01-01"
+  normais_fim: "2024-12-31"
+  janela_chuva_dias: 90    # chuva acumulada: aporte de nutrientes
+  janela_temp_dias: 30     # temperatura média: ritmo de crescimento
+  z_favoravel: 1.0         # chuva OU calor acima disto: condições favoráveis
+                           # os dois: muito favoráveis
+
+# ── Nível único (semáforo) ─────────────────────────────────────────────────
+# Junta óptico, água e radar num só nível, que é o que a página mostra no
+# topo e o que decide os avisos.
+#
+#   ALERTA      algum módulo com alerta CONFIRMADO (radar, água ou NDVI)
+#   VIGILÂNCIA  sinal ainda não confirmado: radar em atenção por duas
+#               passagens ou em alerta numa só; água em vigilância; ou
+#               crescimento acelerado da área no radar
+#   NORMAL      nenhum dos anteriores
+#
+# NDVI confirmado com o radar normal conta como VIGILÂNCIA, não ALERTA: os
+# dois alertas falsos da série (mar/2018, fev/2020) foram assim.
+#
+# Só contam leituras recentes e de confiança suficiente. Sobe na hora; para
+# descer são exigidas 3 execuções seguidas no nível mais baixo (≈ 10 dias):
+# evita que o semáforo pisque entre uma passagem e outra.
+#
+# Reproduzido sobre 2016–2026 (seg e qui): ver README, seção Nível único.
+alerta_unico:
+  validade_dias: {radar: 21, agua: 30, macrofitas: 30}
+  rebaixar_apos_execucoes: 3
+  # Vigilância da clorofila vale por este tempo após o último disparo: o
+  # sinal precoce antecedeu o evento de 2025 em ~65 dias.
+  memoria_vigilancia_dias: 60
+  # Crescimento: inclinação da área no radar nas últimas 4 passagens
+  # (até 35 dias), com a área já acima do esperado (z ≥ 1). Na série,
+  # 1,8 ha/semana disparou 1 vez em 366 passagens normais e, em 2025, no
+  # mesmo dia do primeiro alerta do radar (24/05) — informa a velocidade,
+  # não antecipa.
+  crescimento:
+    passagens: 4
+    janela_dias: 35
+    limiar_ha_semana: 1.8
+    z_minimo: 1.0
+
+# ── Avisos (Telegram, e-mail, WhatsApp) ────────────────────────────────────
+# Aviso a cada execução acostuma o destinatário a ignorar. Por padrão:
+avisos:
+  ao_mudar_nivel: true            # sempre que o nível sobe ou desce
+  lembrete_enquanto_alerta: true  # repete a cada execução enquanto em ALERTA
+  resumo_semanal: 0               # dia do resumo de rotina (0 = segunda;
+                                  # null desliga)
+
 # ── Ressalvas obrigatórias ─────────────────────────────────────────────────
 # Reproduzidas na interface e nas notificações. Não são decorativas: sem
 # calibração local, estes índices são relativos, não concentrações.

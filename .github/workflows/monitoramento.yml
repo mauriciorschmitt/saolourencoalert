@@ -1,12 +1,14 @@
 name: Monitoramento São Lourenço (agendado)
 
-# Uma execução roda os dois módulos sobre a mesma represa e publica tudo num
+# Uma execução roda todos os módulos sobre a mesma represa e publica tudo num
 # único commit:
 #   1. qualidade da água  (python -m src.monitor)  → docs/data/represa*
 #   2. radar Sentinel-1   (python -m src.radar)    → docs/data/radar*
-#   3. macrófitas         (python monitor_ndvi.py) → docs/data, docs/images
-#      e envia o aviso por Telegram/e-mail/WhatsApp, já com o nível de
-#      alerta da água e o status do radar dos passos 1 e 2.
+#   3. clima              (python -m src.clima)    → docs/data/clima.json
+#   4. macrófitas         (python monitor_ndvi.py) → docs/data, docs/images
+#   5. nível único        (python -m src.alerta)   → docs/data/alerta.json
+#      e, conforme a seção `avisos` de config.yaml, o aviso por
+#      Telegram/e-mail/WhatsApp.
 # Um módulo que falha não impede os outros de rodar nem de publicar.
 
 on:
@@ -17,7 +19,7 @@ on:
   workflow_dispatch:
     inputs:
       notificar:
-        description: "Enviar Telegram/e-mail/WhatsApp nesta execução"
+        description: "Enviar o aviso agora (Telegram/e-mail/WhatsApp), mesmo sem mudança de nível"
         type: boolean
         default: true
 
@@ -34,6 +36,9 @@ jobs:
   monitorar:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      SH_CLIENT_ID:     ${{ secrets.SH_CLIENT_ID }}
+      SH_CLIENT_SECRET: ${{ secrets.SH_CLIENT_SECRET }}
 
     steps:
       - name: Baixar repositório
@@ -53,25 +58,31 @@ jobs:
       - name: Qualidade da água
         id: agua
         continue-on-error: true
-        env:
-          SH_CLIENT_ID:     ${{ secrets.SH_CLIENT_ID }}
-          SH_CLIENT_SECRET: ${{ secrets.SH_CLIENT_SECRET }}
         run: python -m src.monitor
 
       - name: Radar Sentinel-1
         id: radar
         continue-on-error: true
-        env:
-          SH_CLIENT_ID:     ${{ secrets.SH_CLIENT_ID }}
-          SH_CLIENT_SECRET: ${{ secrets.SH_CLIENT_SECRET }}
         run: python -m src.radar
 
-      - name: Macrófitas e notificações
+      - name: Clima (Open-Meteo)
+        id: clima
+        continue-on-error: true
+        run: python -m src.clima
+
+      - name: Macrófitas
         id: macrofitas
         continue-on-error: true
         env:
-          SH_CLIENT_ID:       ${{ secrets.SH_CLIENT_ID }}
-          SH_CLIENT_SECRET:   ${{ secrets.SH_CLIENT_SECRET }}
+          # Só para o aviso de falha crítica do próprio módulo.
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python monitor_ndvi.py
+
+      - name: Nível único e avisos
+        id: alerta
+        continue-on-error: true
+        env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
           # Gmail (padrão): deixe HOST e PORT em branco
@@ -83,9 +94,17 @@ jobs:
           EMAIL_SMTP_PORT:    ${{ secrets.EMAIL_SMTP_PORT }}
           WHATSAPP_PHONE:     ${{ secrets.WHATSAPP_PHONE }}
           WHATSAPP_APIKEY:    ${{ secrets.WHATSAPP_APIKEY }}
-          # Agendado: sempre notifica. Manual: conforme a caixa marcada.
+          # Agendado: segue a política de avisos (mudança de nível, lembrete
+          # em alerta, resumo semanal). Manual: a caixa marcada força o envio;
+          # desmarcada, não envia nada.
+          MANUAL:    ${{ github.event_name == 'workflow_dispatch' }}
           NOTIFICAR: ${{ (github.event_name != 'workflow_dispatch' || inputs.notificar) && '1' || '0' }}
-        run: python monitor_ndvi.py
+        run: |
+          if [ "$MANUAL" = "true" ] && [ "$NOTIFICAR" = "1" ]; then
+            python -m src.alerta --forcar-aviso
+          else
+            python -m src.alerta
+          fi
 
       # O commit [skip ci] evita que este push acione workflows de novo.
       - name: Publicar dados e imagens
@@ -112,13 +131,17 @@ jobs:
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
           AGUA:       ${{ steps.agua.outcome }}
           RADAR:      ${{ steps.radar.outcome }}
+          CLIMA:      ${{ steps.clima.outcome }}
           MACROFITAS: ${{ steps.macrofitas.outcome }}
+          ALERTA:     ${{ steps.alerta.outcome }}
           JOB:        ${{ job.status }}
         run: |
           falhas=""
           [ "$AGUA" != "success" ]       && falhas="$falhas qualidade da água ($AGUA);"
           [ "$RADAR" != "success" ]      && falhas="$falhas radar ($RADAR);"
+          [ "$CLIMA" != "success" ]      && falhas="$falhas clima ($CLIMA);"
           [ "$MACROFITAS" != "success" ] && falhas="$falhas macrófitas ($MACROFITAS);"
+          [ "$ALERTA" != "success" ]     && falhas="$falhas nível único/avisos ($ALERTA);"
           [ "$JOB" != "success" ]        && falhas="$falhas publicação ou preparo;"
           if [ -z "$falhas" ]; then
             echo "Todos os módulos rodaram e publicaram."
