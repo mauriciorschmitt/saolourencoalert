@@ -214,6 +214,12 @@ a{color:var(--accent)}
   padding:28px;text-align:center;font-size:13px;color:var(--muted);
 }
 .scene-no-img a{color:var(--accent)}
+/* ── assinatura institucional ── */
+.assinatura{display:flex;flex-direction:column;align-items:center;gap:8px;
+  width:max-content;max-width:calc(100% - 32px);margin:0 auto 48px;
+  text-decoration:none;color:var(--muted);font-size:13px;text-align:center}
+.assinatura img{display:block;width:min(300px,80vw);height:auto}
+.foot + .assinatura{margin-top:28px}
 </style>
 </head>
 <body>
@@ -300,6 +306,11 @@ a{color:var(--accent)}
   Universidade do Contestado · Programa de Pós-graduação em Engenharia Civil Sanitária e Ambiental<br>
   <a href="https://github.com/mauriciorschmitt/saolourencoalert" target="_blank" rel="noopener">Código-fonte no GitHub</a>
 </footer>
+<a class="assinatura" href="https://www.unc.br/" target="_blank" rel="noopener noreferrer"
+   aria-label="PMPECSA: Programa de Mestrado Profissional em Engenharia Civil, Sanitária e Ambiental da UNC">
+  <span>Uma iniciativa do</span>
+  <img src="pmpecsa.png" alt="PMPECSA: Programa de Mestrado Profissional em Engenharia Civil, Sanitária e Ambiental, UNC" width="300" height="71" loading="lazy">
+</a>
 
 </div><!-- /wrap -->
 

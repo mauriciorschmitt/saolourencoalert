@@ -135,12 +135,23 @@ footer li{margin-bottom:6px;max-width:74ch}
 @media (prefers-reduced-motion:no-preference){
   .fade{animation:f .5s ease both}@keyframes f{from{opacity:0}to{opacity:1}}
 }
+/* ── assinatura institucional ── */
+.assinatura{display:flex;flex-direction:column;align-items:center;gap:8px;
+  width:max-content;max-width:calc(100% - 32px);margin:0 auto 48px;
+  text-decoration:none;color:var(--muted);font-size:13px;text-align:center}
+.assinatura img{display:block;width:min(300px,80vw);height:auto}
+@media (prefers-color-scheme:dark){.assinatura img{filter:brightness(0) invert(1) opacity(.9)}}
 </style>
 </head>
 <body>
 <div class="wrap" id="app">
   <p class="sub">Carregando leituras…</p>
 </div>
+<a class="assinatura" href="https://www.unc.br/" target="_blank" rel="noopener noreferrer"
+   aria-label="PMPECSA: Programa de Mestrado Profissional em Engenharia Civil, Sanitária e Ambiental da UNC">
+  <span>Uma iniciativa do</span>
+  <img src="pmpecsa.png" alt="PMPECSA: Programa de Mestrado Profissional em Engenharia Civil, Sanitária e Ambiental, UNC" width="300" height="71" loading="lazy">
+</a>
 
 <script>
 const DADOS = 'data/';
