@@ -135,6 +135,12 @@ footer li{margin-bottom:6px;max-width:74ch}
 @media (prefers-reduced-motion:no-preference){
   .fade{animation:f .5s ease both}@keyframes f{from{opacity:0}to{opacity:1}}
 }
+/* ── radar ── */
+.radar-linha{margin:14px 0 0;font-size:14px;color:var(--muted);max-width:60ch}
+.radar-linha b{color:var(--ink);font-weight:600}
+.radar-linha a{color:var(--water)}
+.radar-ressalvas{font-size:13px;color:var(--muted);max-width:74ch;padding-left:18px}
+.radar-ressalvas li{margin-bottom:6px}
 /* ── assinatura institucional ── */
 .assinatura{display:flex;flex-direction:column;align-items:center;gap:8px;
   width:max-content;max-width:calc(100% - 32px);margin:0 auto 48px;
@@ -329,7 +335,12 @@ function grafico(linhas, indice, clim, rotulo){
               fill="var(--band)" opacity=".5"/>`;
   }
 
-  const linha = pts.map((p,i)=>(i?'L':'M')+X(p.t).toFixed(1)+' '+Y(p.v).toFixed(1)).join(' ');
+  // Mais de 60 dias sem passagem interrompe a linha: ligar os pontos
+  // sugeriria uma transição suave que ninguém observou (o radar, por
+  // exemplo, ficou de 2022 a 2025 quase sem dados).
+  const LACUNA = 60*864e5;
+  const linha = pts.map((p,i)=>(i && (+new Date(p.t) - +new Date(pts[i-1].t)) <= LACUNA ? 'L':'M')
+    +X(p.t).toFixed(1)+' '+Y(p.v).toFixed(1)).join(' ');
   GRAF = {pts, X, Y, W, H, clim};
 
   // Ponto fora da faixa esperada do mês recebe destaque próprio: é o que
@@ -613,8 +624,104 @@ function desenhar_(alvo){
   mostrar(dataInicial);
 }
 
+// ── radar Sentinel-1 ───────────────────────────────────────────────────────
+// Publicado por src/radar.py em radar.csv. Atravessa nuvens: é a leitura que
+// continua chegando quando a represa fica semanas encoberta.
+const ROT_RADAR = {NORMAL:'normal', ATENCAO:'atenção', ALERTA:'alerta',
+                   SEM_REFERENCIA:'sem referência'};
+
+function radarUltimo(){
+  const r = ESTADO.radar;
+  return r && r.length ? r[r.length-1] : null;
+}
+
+// Uma linha na aba da água: a leitura do radar ao lado da óptica.
+function linhaRadar(){
+  const u = radarUltimo(); if(!u) return '';
+  const st = u.frac_vegetacao_status || 'SEM_REFERENCIA';
+  return `<p class="radar-linha">Radar em ${dataBR(u.data)}:
+    <b>${fmt(num(u.area_vegetacao_ha),1)} ha</b> com assinatura de vegetação ·
+    <span class="st st-${st}">${ROT_RADAR[st]||st.toLowerCase()}</span>.
+    <a href="#" data-ir="radar">Ver radar</a></p>`;
+}
+
+// Faixa de destaque quando o radar dispara, em qualquer aba que a exiba.
+function faixaRadar(){
+  const recentes = (ESTADO.radar||[]).slice(-4).reverse();
+  const a = recentes.find(r=>r.frac_vegetacao_status==='ALERTA');
+  if(!a) return '';
+  const conf = a.frac_vegetacao_confirmado==='SIM';
+  return `<div class="nivel ${conf?'confirmado':'vigilancia'}">
+    <h3>${conf ? 'Radar: alerta confirmado' : 'Radar: alerta em uma passagem'}</h3>
+    <p>${fmt(num(a.area_vegetacao_ha),1)} ha da represa com retroespalhamento
+      típico de vegetação flutuante, muito acima do padrão do mês
+      (z = ${fmt(num(a.frac_vegetacao_z),1)}). ${conf
+      ? 'Confirmado em duas passagens seguidas. Recomenda-se verificação de campo.'
+      : 'Aguardando a próxima passagem, em cerca de uma semana, para confirmar.'}</p>
+    <p class="quando">Passagem de ${dataBR(a.data)}.</p>
+  </div>`;
+}
+
+function abaRadar(){
+  const linhas = ESTADO.radar || [];
+  if(!linhas.length) return `<div class="painel-img"><p class="img-vazio">
+    A série do radar ainda não foi publicada. Ela é gerada pelo fluxo
+    "Reconstruir série histórica" (módulo radar) na aba Actions.</p></div>`;
+  const u = linhas[linhas.length-1];
+  const st = u.frac_vegetacao_status || 'SEM_REFERENCIA';
+  const z = num(u.frac_vegetacao_z);
+  const clim = climatologia(linhas, 'area_vegetacao_ha');
+  const cm = clim[+u.data.slice(5,7)];
+  return `
+  ${faixaRadar()}
+  <section class="secao">
+    <h2>Radar Sentinel-1 · através das nuvens</h2>
+    <p class="intro">O radar não depende de luz nem de céu limpo. Água parada
+      funciona como um espelho e devolve pouco sinal ao satélite; uma camada
+      de macrófitas espalha a onda e devolve muito mais. O sistema mede quanto
+      da represa tem esse retorno típico de vegetação e compara com o padrão
+      do mês.</p>
+    <div class="resumo-ant">
+      <div class="it"><div class="v num">${fmt(num(u.area_vegetacao_ha),1)}<span style="font-size:.55em"> ha</span></div>
+        <div class="k">assinatura de vegetação</div></div>
+      ${cm?`<div class="it"><div class="v num">${fmt(cm.mu,1)}<span style="font-size:.55em"> ha</span></div>
+        <div class="k">esperado para o mês</div></div>`:''}
+      <div class="it"><div class="v num">${z===null?'—':(z>0?'+':'')+fmt(z,1)}</div>
+        <div class="k">escore · <span class="st st-${st}">${ROT_RADAR[st]||st}</span></div></div>
+      <div class="it"><div class="v num">${new Date(u.data+'T12:00:00')
+        .toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})}</div>
+        <div class="k">passagem mais recente</div></div>
+    </div>
+  </section>
+
+  <section class="secao">
+    <h2>Série desde 2016</h2>
+    <p class="intro">Área com retroespalhamento VH acima de −20 dB. A faixa é
+      o intervalo esperado para cada mês, calculado sobre 2016–2021. O evento
+      de 2025 aparece a partir de maio.</p>
+    <div class="gchart">${grafico(linhas, 'area_vegetacao_ha', clim, 'assinatura de vegetação no radar')}</div>
+  </section>
+
+  <section class="secao">
+    <h2>Como ler</h2>
+    <ul class="radar-ressalvas">
+      <li><b>Alerta</b> quando a área passa 3 desvios do padrão do mês; é
+        <b>confirmado</b> na segunda passagem seguida. Na série de 2016 a 2026
+        isso não aconteceu nenhuma vez fora do evento de 2025, que foi
+        confirmado em 31/05/2025, 12 dias antes do alerta óptico.</li>
+      <li>O radar detecta vegetação já formada sobre a água. O sinal precoce de
+        clorofila, que antecede a infestação, só existe no módulo óptico.</li>
+      <li>Sobre Mafra só há passagens em órbita descendente, a cada 5 a 7 dias.
+        Entre dezembro de 2021 e abril de 2025 quase não houve imagens, por
+        causa da pane do satélite Sentinel-1B.</li>
+      <li>Vento forte e vegetação nas margens elevam um pouco o sinal; por isso
+        sempre há alguns hectares de assinatura mesmo com a represa limpa.</li>
+    </ul>
+  </section>`;
+}
+
 // ── montagem ───────────────────────────────────────────────────────────────
-let ESTADO = {linhas:[], resumo:null, geo:null, indice:null, aba:'agua'};
+let ESTADO = {linhas:[], resumo:null, geo:null, indice:null, aba:'agua', radar:null};
 let ANT = null;   // dados do sistema de macrófitas, carregados sob demanda
 
 function render(){
@@ -677,9 +784,13 @@ function render(){
       aria-selected="${ESTADO.aba==='agua'}">Qualidade da água</button>
     <button class="aba" role="tab" id="tab-macro" data-aba="macro"
       aria-selected="${ESTADO.aba==='macro'}">Macrófitas e imagens</button>
+    ${ESTADO.radar && ESTADO.radar.length ? `<button class="aba" role="tab" id="tab-radar" data-aba="radar"
+      aria-selected="${ESTADO.aba==='radar'}">Radar · através das nuvens</button>` : ''}
   </nav>
 
-  <div id="conteudo-abas">${ESTADO.aba==='macro' ? '<p class="sub">Carregando…</p>' : `
+  <div id="conteudo-abas">${ESTADO.aba==='macro' ? '<p class="sub">Carregando…</p>'
+    : ESTADO.aba==='radar' ? abaRadar() : `
+  ${faixaRadar()}
   ${faixaNivel(linhas)}
 
   <section class="estado">
@@ -692,6 +803,7 @@ function render(){
         ${dataBR(u.data)}, cobriu apenas parte da represa e não permite
         estimar área.</p>` : ''}
       ${aviso}
+      ${linhaRadar()}
     </div>
   </section>
 
@@ -721,7 +833,7 @@ function render(){
   <footer>
     <a href="indicadores.html">Indicadores e série completa</a> ·
     Atualizado em ${new Date(resumo.atualizado_em).toLocaleString('pt-BR')}.
-    Dados Sentinel-2 do programa Copernicus.
+    Dados Sentinel-2 e Sentinel-1 do programa Copernicus.
     <ul>${resumo.ressalvas.map(r=>`<li>${r}</li>`).join('')}</ul>
   </footer>`;
 
@@ -736,8 +848,13 @@ function render(){
   // O carregamento da aba é disparado aqui, e não no clique: assim qualquer
   // caminho que exiba a aba busca os dados, e ela não fica presa em
   // "Carregando" se o render for chamado de outro lugar.
-  if(ESTADO.aba==='agua') ativarHover();
-  else montarMacrofitas();
+  if(ESTADO.aba==='macro') montarMacrofitas();
+  else ativarHover();
+
+  document.querySelectorAll('[data-ir]').forEach(a=>{
+    a.onclick = ev=>{ ev.preventDefault(); ESTADO.aba = a.dataset.ir; render();
+      document.getElementById('conteudo-abas').scrollIntoView({behavior:'smooth'}); };
+  });
 
   document.querySelectorAll('tbody tr').forEach(tr=>{
     const troca = ()=>{ESTADO.indice = tr.dataset.i; render();};
@@ -774,10 +891,13 @@ window.addEventListener('resize', ()=>{
     if(!resumo) resumo = resumoDoCSV(linhas, setorId);
 
     const geo = await tentar('setores.geojson');   // silhueta é opcional
+    // Radar é opcional: sem o arquivo, a aba simplesmente não aparece.
+    const csvRadar = await tentar('radar.csv','texto');
+    const radar = csvRadar ? parseCSV(csvRadar).filter(r=>r.data) : null;
 
     // Preserva o que já estava no estado — sobretudo `aba`. Recriar o
     // objeto do zero apagava esse campo e a página abria na aba errada.
-    ESTADO = {...ESTADO, linhas, resumo, geo,
+    ESTADO = {...ESTADO, linhas, resumo, geo, radar,
               indice: Object.keys(resumo.indices)[0]};
     if(!ESTADO.indice) throw new Error(
       'O CSV não tem nenhuma coluna de índice reconhecida.');

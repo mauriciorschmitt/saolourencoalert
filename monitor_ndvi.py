@@ -799,6 +799,38 @@ def resumo_agua() -> Tuple[str, bool]:
         linhas.append(f"ℹ️ {mensagem}")
     return "\n".join(linhas) + "\n", nivel in ("CONFIRMADO", "VIGILANCIA")
 
+
+# ── Resumo do radar (Sentinel-1) ─────────────────────────────────────────────
+# Mesmo arranjo do bloco da água: src.radar roda antes no workflow e grava
+# radar_ultimo.json. O radar atravessa nuvens, então costuma ter passagem
+# mais recente que a melhor cena óptica.
+
+RADAR_JSON = Path(__file__).parent / "docs" / "data" / "radar_ultimo.json"
+
+def resumo_radar() -> Tuple[str, bool]:
+    """Texto para a notificação e se o radar exige aviso por si só (ALERTA)."""
+    try:
+        obs = json.loads(RADAR_JSON.read_text(encoding="utf-8"))["observacao"]
+    except (OSError, ValueError, KeyError) as exc:
+        log.warning("Resumo do radar indisponível: %s", exc)
+        return "", False
+    st_radar   = obs.get("frac_vegetacao_status") or "SEM_REFERENCIA"
+    confirmado = obs.get("frac_vegetacao_confirmado") == "SIM"
+    emoji  = {"ALERTA": "🚨", "ATENCAO": "⚠️"}.get(st_radar, "✅")
+    rotulo = {"ALERTA": "ALERTA CONFIRMADO" if confirmado
+                        else "ALERTA (aguardando 2ª passagem)",
+              "ATENCAO": "ATENÇÃO"}.get(st_radar, st_radar.replace("_", " "))
+    area, z = _num(obs.get("area_vegetacao_ha")), _num(obs.get("frac_vegetacao_z"))
+    linhas = [f"📡 Radar (atravessa nuvens) — {obs.get('data', '?')}",
+              f"{emoji} Status: {rotulo}"]
+    if area is not None:
+        linhas.append(f"🌿 Assinatura de vegetação: {area:.1f} ha"
+                      + (f" (z = {z:.1f})" if z is not None else ""))
+    if st_radar == "ALERTA":
+        linhas.append("ℹ️ Retroespalhamento típico de vegetação flutuante muito acima "
+                      "do padrão do mês. Recomenda-se verificação de campo.")
+    return "\n".join(linhas) + "\n", st_radar == "ALERTA"
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # 11. SMOKE TEST
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -813,6 +845,9 @@ def smoke_test():
             "Configure em Settings > Secrets and variables > Actions no GitHub."
         )
     active = notificacao.canais_ativos()
+    if notificacao.suprimido():
+        log.info("Smoke test: NOTIFICAR=0, canais não são exigidos.")
+        return
     if not active:
         raise EnvironmentError(
             "Nenhum canal de notificação configurado. "
@@ -833,14 +868,16 @@ def main():
     cred   = credencial()
     scenes = fetch_all_scenes(cred)
     agua_txt, agua_relevante = resumo_agua()
+    radar_txt, radar_relevante = resumo_radar()
 
     if not scenes:
         msg = (
             f"[São Lourenço] Nenhuma imagem Sentinel-2 com pixels válidos "
             f"foi encontrada nos últimos {LOOKBACK_DAYS} dias.\n"
         )
-        if agua_txt:
-            msg += "\n" + agua_txt
+        for bloco in (radar_txt, agua_txt):
+            if bloco:
+                msg += "\n" + bloco
         log.warning(msg)
         notificacao.todos("Monitoramento São Lourenço – sem imagem", msg)
         return
@@ -903,8 +940,9 @@ def main():
             "Aguardando a próxima passagem para confirmar ou descartar.\n"
         )
 
-    if agua_txt:
-        message += "\n" + agua_txt
+    for bloco in (radar_txt, agua_txt):
+        if bloco:
+            message += "\n" + bloco
 
     log.info("Mensagem composta:\n%s", message)
 
@@ -912,9 +950,13 @@ def main():
     # mas não disparam push: alerta falso recorrente faz o destinatário parar
     # de olhar os alertas verdadeiros. Vigilância ou alerta da qualidade da
     # água avisa mesmo assim: esses níveis já exigem cena de confiança ALTA.
-    if _should_notify(confianca) or agua_relevante:
+    # Alerta do radar também: ele não depende de céu limpo, e é justamente
+    # com a represa encoberta que o óptico ficaria calado.
+    if _should_notify(confianca) or agua_relevante or radar_relevante:
         log.info("Alerta confirmado por persistência: %s", confirmado)
         assunto = f"Monitoramento São Lourenço – {status}"
+        if radar_relevante:
+            assunto += " | radar: ALERTA"
         if agua_relevante:
             assunto += " | água: atenção"
         notificacao.todos(assunto, message, best_panel)
@@ -935,7 +977,8 @@ if __name__ == "__main__":
     except Exception as exc:
         log.exception("Falha crítica na execução do monitor: %s", exc)
         try:
-            send_telegram(f"[ERRO CRÍTICO] Monitor São Lourenço falhou: {exc}")
+            if not notificacao.suprimido():
+                send_telegram(f"[ERRO CRÍTICO] Monitor São Lourenço falhou: {exc}")
         except Exception:
             pass
         sys.exit(1)

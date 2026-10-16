@@ -3,10 +3,11 @@ name: Monitoramento São Lourenço (agendado)
 # Uma execução roda os dois módulos sobre a mesma represa e publica tudo num
 # único commit:
 #   1. qualidade da água  (python -m src.monitor)  → docs/data/represa*
-#   2. macrófitas         (python monitor_ndvi.py) → docs/data, docs/images
+#   2. radar Sentinel-1   (python -m src.radar)    → docs/data/radar*
+#   3. macrófitas         (python monitor_ndvi.py) → docs/data, docs/images
 #      e envia o aviso por Telegram/e-mail/WhatsApp, já com o nível de
-#      alerta da água calculado no passo 1.
-# Um módulo que falha não impede o outro de rodar nem de publicar.
+#      alerta da água e o status do radar dos passos 1 e 2.
+# Um módulo que falha não impede os outros de rodar nem de publicar.
 
 on:
   schedule:
@@ -57,6 +58,14 @@ jobs:
           SH_CLIENT_SECRET: ${{ secrets.SH_CLIENT_SECRET }}
         run: python -m src.monitor
 
+      - name: Radar Sentinel-1
+        id: radar
+        continue-on-error: true
+        env:
+          SH_CLIENT_ID:     ${{ secrets.SH_CLIENT_ID }}
+          SH_CLIENT_SECRET: ${{ secrets.SH_CLIENT_SECRET }}
+        run: python -m src.radar
+
       - name: Macrófitas e notificações
         id: macrofitas
         continue-on-error: true
@@ -102,15 +111,17 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
           AGUA:       ${{ steps.agua.outcome }}
+          RADAR:      ${{ steps.radar.outcome }}
           MACROFITAS: ${{ steps.macrofitas.outcome }}
           JOB:        ${{ job.status }}
         run: |
           falhas=""
           [ "$AGUA" != "success" ]       && falhas="$falhas qualidade da água ($AGUA);"
+          [ "$RADAR" != "success" ]      && falhas="$falhas radar ($RADAR);"
           [ "$MACROFITAS" != "success" ] && falhas="$falhas macrófitas ($MACROFITAS);"
           [ "$JOB" != "success" ]        && falhas="$falhas publicação ou preparo;"
           if [ -z "$falhas" ]; then
-            echo "Os dois módulos rodaram e publicaram."
+            echo "Todos os módulos rodaram e publicaram."
             exit 0
           fi
           echo "::error::Falhou:$falhas"

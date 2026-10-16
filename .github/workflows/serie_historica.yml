@@ -10,8 +10,8 @@ on:
       modulo:
         description: "Qual série reconstruir"
         type: choice
-        options: [ambos, agua, macrofitas]
-        default: ambos
+        options: [todos, agua, radar, macrofitas]
+        default: todos
       desde:
         description: "Data inicial (AAAA-MM-DD)"
         required: false
@@ -56,7 +56,7 @@ jobs:
       - run: pip install -r requirements.txt
 
       - name: Qualidade da água
-        if: inputs.modulo != 'macrofitas'
+        if: inputs.modulo == 'todos' || inputs.modulo == 'agua'
         run: |
           ARGS=(--desde "$DESDE")
           [ -n "$ATE" ]   && ARGS+=(--ate "$ATE")
@@ -64,11 +64,18 @@ jobs:
           python -m src.monitor "${ARGS[@]}"
 
       - name: Macrófitas
-        if: inputs.modulo != 'agua'
+        if: inputs.modulo == 'todos' || inputs.modulo == 'macrofitas'
         run: |
           ARGS=(--since "$DESDE")
           [ -n "$ATE" ] && ARGS+=(--until "$ATE")
           python backfill_historico.py "${ARGS[@]}"
+
+      - name: Radar Sentinel-1
+        if: inputs.modulo == 'todos' || inputs.modulo == 'radar'
+        run: |
+          ARGS=(--desde "$DESDE")
+          [ -n "$ATE" ] && ARGS+=(--ate "$ATE")
+          python -m src.radar "${ARGS[@]}"
 
       - name: Publicar séries
         run: >-
