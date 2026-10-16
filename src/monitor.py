@@ -73,7 +73,7 @@ def blocos(inicio: dt.date, fim: dt.date, dias: int):
         atual = termino + dt.timedelta(days=1)
 
 
-def coletar_setor(token: str, cfg: dict, setor: dict,
+def coletar_setor(cred: sh.Credencial, cfg: dict, setor: dict,
                   inicio: dt.date, fim: dt.date) -> List[dict]:
     """Série bruta de um setor, já rotulada por confiança."""
     ind_cfg = cfg["indices"]
@@ -98,7 +98,7 @@ def coletar_setor(token: str, cfg: dict, setor: dict,
     for ini, fi in blocos(inicio, fim, aq["chunk_dias"]):
         log.info("  %s: %s a %s", setor["id"], ini, fi)
         try:
-            bruto = sh.consultar(token, geom, evalscript, ini, fi, saidas,
+            bruto = sh.consultar(cred, geom, evalscript, ini, fi, saidas,
                                  aq["colecao"], aq["resolucao_m"],
                                  aq.get("recuo_borda_m", 0))
         except sh.SentinelHubError as exc:
@@ -346,12 +346,13 @@ def main() -> int:
         return 1
 
     log.info("Período %s a %s | %d setor(es)", inicio, fim, len(setores))
-    token = sh.get_token()
+    cred = sh.Credencial()
+    cred.renovar()   # falha cedo se as credenciais estiverem erradas
 
     series: Dict[str, List[dict]] = {}
     for setor in setores:
         log.info("Setor %s", setor["id"])
-        novos = coletar_setor(token, cfg, setor, inicio, fim)
+        novos = coletar_setor(cred, cfg, setor, inicio, fim)
         anteriores = ler_existente(setor["id"])
         if not novos:
             if not anteriores:

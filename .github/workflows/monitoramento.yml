@@ -1,0 +1,118 @@
+name: Monitoramento São Lourenço (agendado)
+
+# Uma execução roda os dois módulos sobre a mesma represa e publica tudo num
+# único commit:
+#   1. qualidade da água  (python -m src.monitor)  → docs/data/represa*
+#   2. macrófitas         (python monitor_ndvi.py) → docs/data, docs/images
+#      e envia o aviso por Telegram/e-mail/WhatsApp, já com o nível de
+#      alerta da água calculado no passo 1.
+# Um módulo que falha não impede o outro de rodar nem de publicar.
+
+on:
+  schedule:
+    # Segunda e quinta, 09:17 UTC (06:17 BRT). O GitHub costuma atrasar
+    # agendamentos em horas cheias; minuto quebrado reduz a espera.
+    - cron: "17 9 * * 1,4"
+  workflow_dispatch:
+    inputs:
+      notificar:
+        description: "Enviar Telegram/e-mail/WhatsApp nesta execução"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  # Mesma fila da série histórica e do registro de campo: um espera o outro
+  # terminar em vez de disputarem o mesmo push.
+  group: publicacao-dados
+  cancel-in-progress: false
+
+jobs:
+  monitorar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # rebase precisa do histórico
+
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Qualidade da água
+        id: agua
+        continue-on-error: true
+        env:
+          SH_CLIENT_ID:     ${{ secrets.SH_CLIENT_ID }}
+          SH_CLIENT_SECRET: ${{ secrets.SH_CLIENT_SECRET }}
+        run: python -m src.monitor
+
+      - name: Macrófitas e notificações
+        id: macrofitas
+        continue-on-error: true
+        env:
+          SH_CLIENT_ID:       ${{ secrets.SH_CLIENT_ID }}
+          SH_CLIENT_SECRET:   ${{ secrets.SH_CLIENT_SECRET }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          # Gmail (padrão): deixe HOST e PORT em branco
+          # Outlook/Office365: HOST=smtp.office365.com  PORT=587
+          EMAIL_ADDRESS:      ${{ secrets.EMAIL_ADDRESS }}
+          EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
+          ALERT_EMAIL_TO:     ${{ secrets.ALERT_EMAIL_TO }}
+          EMAIL_SMTP_HOST:    ${{ secrets.EMAIL_SMTP_HOST }}
+          EMAIL_SMTP_PORT:    ${{ secrets.EMAIL_SMTP_PORT }}
+          WHATSAPP_PHONE:     ${{ secrets.WHATSAPP_PHONE }}
+          WHATSAPP_APIKEY:    ${{ secrets.WHATSAPP_APIKEY }}
+          # Agendado: sempre notifica. Manual: conforme a caixa marcada.
+          NOTIFICAR: ${{ (github.event_name != 'workflow_dispatch' || inputs.notificar) && '1' || '0' }}
+        run: python monitor_ndvi.py
+
+      # O commit [skip ci] evita que este push acione workflows de novo.
+      - name: Publicar dados e imagens
+        if: always()
+        run: >-
+          bash .github/scripts/publicar.sh
+          "dados: atualiza monitoramento São Lourenço [skip ci]"
+          docs/data docs/images
+
+      # Backup do painel na aba Actions (30 dias), mesmo se o push falhar.
+      - name: Salvar painel como artefato
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: panel-${{ github.run_id }}
+          path: docs/images/latest/panel.png
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Conferir módulos e avisar falha
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          AGUA:       ${{ steps.agua.outcome }}
+          MACROFITAS: ${{ steps.macrofitas.outcome }}
+          JOB:        ${{ job.status }}
+        run: |
+          falhas=""
+          [ "$AGUA" != "success" ]       && falhas="$falhas qualidade da água ($AGUA);"
+          [ "$MACROFITAS" != "success" ] && falhas="$falhas macrófitas ($MACROFITAS);"
+          [ "$JOB" != "success" ]        && falhas="$falhas publicação ou preparo;"
+          if [ -z "$falhas" ]; then
+            echo "Os dois módulos rodaram e publicaram."
+            exit 0
+          fi
+          echo "::error::Falhou:$falhas"
+          bash .github/scripts/avisar_falha.sh "[ERRO] Monitoramento São Lourenço — falhou:$falhas Detalhes:"
+          exit 1

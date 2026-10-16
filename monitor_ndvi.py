@@ -22,7 +22,9 @@ O que este script faz em cada execução
       docs/data/passagens_30d.json   → TODAS as cenas do período + flag "best"
       docs/images/latest/panel.png   → painel da melhor cena
       docs/images/archive/YYYY-MM-DD/panel.png → arquivo por data
-6.  Envia notificações via Telegram, e-mail e/ou WhatsApp (CallMeBot).
+6.  Envia notificações via Telegram, e-mail e/ou WhatsApp (CallMeBot),
+    incluindo o nível de alerta do módulo de qualidade da água, que roda
+    antes no mesmo workflow (docs/data/represa_ultimo.json).
 7.  Todas as chamadas HTTP têm retry com backoff exponencial.
 """
 
@@ -32,18 +34,17 @@ import io
 import json
 import logging
 import os
-import smtplib
 import sys
 import time
 import uuid
-from email.mime.image import MIMEImage
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Optional, Tuple
 
 import requests
+import yaml
 from pyproj import Transformer
+
+from src import notificacao, sentinelhub as sh
 
 # ── Logging estruturado ──────────────────────────────────────────────────────
 logging.basicConfig(
@@ -268,24 +269,17 @@ def _http_post(url, *, max_retries=HTTP_MAX_RETRIES, backoff=HTTP_BACKOFF_BASE, 
     )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 4. AUTENTICAÇÃO  (token único por execução)
+# 4. AUTENTICAÇÃO  (mesma credencial do módulo de qualidade da água)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def get_access_token() -> str:
+def credencial() -> sh.Credencial:
+    """Credencial que renova o token sozinha. Obtém o primeiro token já
+    aqui, para falhar cedo se os secrets estiverem errados."""
     log.info("Obtendo token OAuth2 do Copernicus CDSE...")
-    resp = _http_post(
-        SH_TOKEN_URL,
-        data={
-            "grant_type": "client_credentials",
-            "client_id":     os.environ["SH_CLIENT_ID"],
-            "client_secret": os.environ["SH_CLIENT_SECRET"],
-        },
-        timeout=30,
-    )
-    if not resp.ok:
-        raise RuntimeError(f"Token endpoint: {resp.status_code} {resp.text}")
+    cred = sh.Credencial()
+    cred.renovar()
     log.info("Token obtido com sucesso.")
-    return resp.json()["access_token"]
+    return cred
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 5. GEOMETRIA
@@ -328,7 +322,7 @@ def _sanity(scene: dict):
         if v is not None and not (-1.0 <= v <= 1.0):
             log.warning("%s fora do intervalo físico: %.4f", k.upper(), v)
 
-def fetch_all_scenes(token: str) -> list[dict]:
+def fetch_all_scenes(cred: sh.Credencial) -> list[dict]:
     """
     Retorna lista de todas as cenas válidas dos últimos LOOKBACK_DAYS dias,
     ordenadas por data. Cada item tem: date, ndvi, ndwi, ndmi, cloud_pct,
@@ -363,7 +357,7 @@ def fetch_all_scenes(token: str) -> list[dict]:
             "ndmi": {"statistics": {"default": {}}},
         },
     }
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    headers = {**cred.cabecalho(), "Content-Type": "application/json"}
     resp = _http_post(SH_STATS_URL, headers=headers, json=payload, timeout=90)
     if not resp.ok:
         raise RuntimeError(f"API Estatística: {resp.status_code} {resp.text}")
@@ -421,7 +415,7 @@ def _bbox(geometry_wgs84: dict, pad: float = 0.05) -> list[float]:
     dlon  = (max(lons) - min(lons)) * pad; dlat = (max(lats) - min(lats)) * pad
     return [min(lons)-dlon, min(lats)-dlat, max(lons)+dlon, max(lats)+dlat]
 
-def _fetch_png(token: str, evalscript: str, bbox: list, date_str: str,
+def _fetch_png(cred: sh.Credencial, evalscript: str, bbox: list, date_str: str,
                w: int, h: int) -> bytes:
     payload = {
         "input": {
@@ -446,7 +440,7 @@ def _fetch_png(token: str, evalscript: str, bbox: list, date_str: str,
         },
         "evalscript": evalscript,
     }
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    headers = {**cred.cabecalho(), "Content-Type": "application/json"}
     resp = _http_post(SH_PROCESS_URL, headers=headers, json=payload, timeout=60)
     if not resp.ok:
         raise RuntimeError(f"API de Processo: {resp.status_code} {resp.content[:300]}")
@@ -466,7 +460,7 @@ def _load_font(size: int = 14):
                 pass
     return ImageFont.load_default()
 
-def build_panel(token: str, date_str: str, roi_wgs84: dict) -> Optional[bytes]:
+def build_panel(cred: sh.Credencial, date_str: str, roi_wgs84: dict) -> Optional[bytes]:
     """
     Gera PNG composto (cor real | NDVI | NDWI) para uma data.
     Retorna bytes ou None se falhar (etapa não-bloqueante).
@@ -487,7 +481,7 @@ def build_panel(token: str, date_str: str, roi_wgs84: dict) -> Optional[bytes]:
         ]
         tiles = []
         for label, script in specs:
-            png = _fetch_png(token, script, bb, date_str, w, h)
+            png = _fetch_png(cred, script, bb, date_str, w, h)
             tiles.append((label, Image.open(io.BytesIO(png)).convert("RGB")))
 
         font_lg = _load_font(14)
@@ -554,47 +548,37 @@ def _should_notify(confidence: str) -> bool:
         NOTIFY_MIN_CONFIDENCE, 0
     )
 
-def _last_qualified_z(before_date: str) -> Optional[float]:
-    """Z-score da última observação QUALIFICADA anterior a `before_date`.
+def recalcular_confirmacao(by_date: dict) -> None:
+    """Preenche `alerta_confirmado` em toda a série, in place.
 
-    Qualificada = confiança suficiente para notificar. Observações de baixa
-    confiança são ignoradas aqui (mas continuam no histórico): uma cena
-    ruim no meio não deve nem confirmar nem quebrar uma sequência.
-    Retorna None se não houver histórico anterior.
+    Percorre em ordem de data: confirma quando a observação qualificada e a
+    qualificada imediatamente anterior ultrapassam o limiar. Observações de
+    baixa confiança não confirmam nem quebram a sequência. Usado pelo monitor
+    e pelo backfill, que assim seguem exatamente o mesmo critério; aplicado à
+    série inteira, uma cena que entrou nesta execução também conta como
+    anterior.
     """
-    if not HISTORY_CSV.exists():
-        return None
-    best_date, best_z = None, None
-    try:
-        with open(HISTORY_CSV, encoding="utf-8", newline="") as fh:
-            for row in csv.DictReader(fh):
-                d = row.get("date") or ""
-                if not d or d >= before_date:
-                    continue
-                conf = row.get("confianca") or _confidence(
-                    float(row.get("valid_fraction") or 0.0)
-                )
-                if not _should_notify(conf):
-                    continue
-                if best_date is None or d > best_date:
-                    best_date, best_z = d, float(row.get("zscore") or 0.0)
-    except (OSError, ValueError, TypeError) as exc:
-        log.warning("Não foi possível ler o histórico para persistência: %s", exc)
-        return None
-    return best_z
-
-def _is_persistent_alert(date_str: str, z: float, confidence: str) -> bool:
-    """True se ESTA observação e a qualificada imediatamente anterior
-    ultrapassarem o limiar de alerta."""
-    if z < ALERT_Z_THRESHOLD or not _should_notify(confidence):
-        return False
-    if not ALERT_REQUIRE_PERSISTENCE:
-        return True
-    prev_z = _last_qualified_z(date_str)
-    if prev_z is None:
-        log.info("Sem observação qualificada anterior: alerta não confirmado.")
-        return False
-    return prev_z >= ALERT_Z_THRESHOLD
+    prev_qualified_z = None
+    for date_key in sorted(by_date):
+        row = by_date[date_key]
+        try:
+            zz = float(row.get("zscore") or 0.0)
+            conf = row.get("confianca") or _confidence(
+                float(row.get("valid_fraction") or 0.0))
+        except (TypeError, ValueError):
+            row["alerta_confirmado"] = ""
+            continue
+        if not _should_notify(conf):
+            row["alerta_confirmado"] = "NAO"
+            continue
+        confirmado = (
+            zz >= ALERT_Z_THRESHOLD
+            and (not ALERT_REQUIRE_PERSISTENCE
+                 or (prev_qualified_z is not None
+                     and prev_qualified_z >= ALERT_Z_THRESHOLD))
+        )
+        row["alerta_confirmado"] = "SIM" if confirmado else "NAO"
+        prev_qualified_z = zz
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 9. PERSISTÊNCIA
@@ -636,7 +620,33 @@ def save_all(scenes: list[dict], best: dict, z: float, run_id: str) -> dict:
 
     status     = _status(z)
     confianca  = _confidence(best["valid_fraction"])
-    persistente = _is_persistent_alert(best["date"], z, confianca)
+
+    # ── historico.csv (série acumulada — upsert por data) ───────────────────
+    # Todas as passagens do período entram, não só a melhor: é o mesmo que o
+    # backfill grava, e sem isso a série ficaria mais esparsa daqui em diante
+    # do que no passado. Reprocessar a mesma data apenas a sobrescreve.
+    existing: dict[str, dict] = {}
+    if HISTORY_CSV.exists():
+        with open(HISTORY_CSV, encoding="utf-8", newline="") as f:
+            for row in csv.DictReader(f):
+                existing[row["date"]] = row
+    for sc in scenes:
+        sz, _ = check_anomaly(sc["date"], sc["ndvi"])
+        existing[sc["date"]] = {
+            "date": sc["date"], "ndvi": sc["ndvi"], "ndwi": sc["ndwi"],
+            "ndmi": sc["ndmi"], "cloud_pct": sc["cloud_pct"],
+            "valid_fraction": sc["valid_fraction"], "zscore": round(sz, 4),
+            "status": _status(sz),
+            "confianca": _confidence(sc["valid_fraction"]),
+        }
+    recalcular_confirmacao(existing)
+    persistente = existing[best["date"]]["alerta_confirmado"] == "SIM"
+    with open(HISTORY_CSV, "w", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=CSV_FIELDS, extrasaction="ignore")
+        w.writeheader()
+        for key in sorted(existing):
+            w.writerow(existing[key])
+    log.info("historico.csv atualizado (%d registros).", len(existing))
 
     # ── ultimo.json (estado mais recente — melhor cena) ─────────────────────
     payload = {
@@ -680,20 +690,6 @@ def save_all(scenes: list[dict], best: dict, z: float, run_id: str) -> dict:
         json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     log.info("ultimo.json atualizado (status=%s, run_id=%s).", status, run_id)
-
-    # ── historico.csv (série acumulada — upsert por data) ───────────────────
-    existing: dict[str, dict] = {}
-    if HISTORY_CSV.exists():
-        with open(HISTORY_CSV, encoding="utf-8", newline="") as f:
-            for row in csv.DictReader(f):
-                existing[row["date"]] = row
-    existing[best["date"]] = {k: payload.get(k, "") for k in CSV_FIELDS}
-    with open(HISTORY_CSV, "w", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=CSV_FIELDS)
-        w.writeheader()
-        for key in sorted(existing):
-            w.writerow(existing[key])
-    log.info("historico.csv atualizado (%d registros).", len(existing))
 
     # ── passagens_30d.json (todas as cenas do período + z-score) ────────────
     # Enriquece cada cena com z-score e status antes de salvar
@@ -744,105 +740,64 @@ def save_all(scenes: list[dict], best: dict, z: float, run_id: str) -> dict:
 # 10. NOTIFICAÇÕES
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# ── Telegram ─────────────────────────────────────────────────────────────────
+# O envio em si fica em src/notificacao.py. Os nomes abaixo são mantidos
+# para não quebrar quem já os importava.
+send_telegram = notificacao.telegram
+send_whatsapp = notificacao.whatsapp
+send_email    = notificacao.email
 
-def send_telegram(message: str, image_bytes: Optional[bytes] = None):
-    token    = os.environ.get("TELEGRAM_BOT_TOKEN")
-    chat_raw = os.environ.get("TELEGRAM_CHAT_ID")
-    if not token or not chat_raw:
-        log.info("Telegram não configurado; pulando.")
-        return
-    for chat_id in [c.strip() for c in chat_raw.split(",") if c.strip()]:
-        try:
-            if image_bytes:
-                caption = message[:1021] + "..." if len(message) > 1024 else message
-                resp = _http_post(
-                    f"https://api.telegram.org/bot{token}/sendPhoto",
-                    data={"chat_id": chat_id, "caption": caption},
-                    files={"photo": ("panel.png", image_bytes, "image/png")},
-                    timeout=60,
-                )
-            else:
-                resp = _http_post(
-                    f"https://api.telegram.org/bot{token}/sendMessage",
-                    data={"chat_id": chat_id, "text": message},
-                    timeout=30,
-                )
-            if resp.ok:
-                log.info("Telegram enviado para %s.", chat_id)
-            else:
-                log.error("Telegram falhou para %s: %s", chat_id, resp.text)
-        except Exception as exc:
-            log.error("Erro Telegram %s: %s", chat_id, exc)
 
-# ── WhatsApp via CallMeBot (gratuito, sem servidor) ──────────────────────────
-# Siga https://www.callmebot.com/blog/free-api-whatsapp-messages/ para
-# obter sua APIKEY. Defina os secrets WHATSAPP_PHONE e WHATSAPP_APIKEY.
-# Apenas texto — imagem chega pelo Telegram/e-mail.
+# ── Resumo do módulo de qualidade da água ────────────────────────────────────
+# O módulo de água roda antes, no mesmo workflow, e grava a última observação
+# em represa_ultimo.json. Ler esse arquivo é o que põe os dois módulos num
+# único aviso, sem que um importe a lógica do outro. Se o módulo de água
+# falhou nesta execução, o arquivo é o da execução anterior: a data exibida
+# deixa isso visível.
 
-def send_whatsapp(message: str):
-    phone  = os.environ.get("WHATSAPP_PHONE")
-    apikey = os.environ.get("WHATSAPP_APIKEY")
-    if not phone or not apikey:
-        log.info("WhatsApp não configurado; pulando.")
-        return
+AGUA_JSON   = Path(__file__).parent / "docs" / "data" / "represa_ultimo.json"
+CONFIG_YAML = Path(__file__).parent / "config.yaml"
+
+def _num(v) -> Optional[float]:
     try:
-        resp = requests.get(
-            "https://api.callmebot.com/whatsapp.php",
-            params={"phone": phone, "text": message, "apikey": apikey},
-            timeout=30,
-        )
-        if resp.ok:
-            log.info("WhatsApp enviado para %s.", phone)
-        else:
-            log.error("WhatsApp falhou: %d %s", resp.status_code, resp.text[:200])
-    except Exception as exc:
-        log.error("Erro WhatsApp: %s", exc)
+        return float(v)
+    except (TypeError, ValueError):
+        return None
 
-# ── E-mail (Gmail / Outlook / SMTP genérico) ─────────────────────────────────
-# Gmail:   EMAIL_SMTP_HOST=smtp.gmail.com  EMAIL_SMTP_PORT=465   (SSL)
-# Outlook: EMAIL_SMTP_HOST=smtp.office365.com  EMAIL_SMTP_PORT=587  (STARTTLS)
-# Se EMAIL_SMTP_HOST não estiver definido, usa Gmail como padrão.
-
-def send_email(subject: str, message: str, image_bytes: Optional[bytes] = None):
-    addr     = os.environ.get("EMAIL_ADDRESS")
-    password = os.environ.get("EMAIL_APP_PASSWORD")
-    to_raw   = os.environ.get("ALERT_EMAIL_TO")
-    if not addr or not password or not to_raw:
-        log.info("E-mail não configurado; pulando.")
-        return
-    smtp_host = os.environ.get("EMAIL_SMTP_HOST") or "smtp.gmail.com"
-    smtp_port = int(os.environ.get("EMAIL_SMTP_PORT") or "465")
-    to_addrs  = [a.strip() for a in to_raw.split(",") if a.strip()]
-
-    if image_bytes:
-        msg = MIMEMultipart()
-        msg["Subject"] = subject
-        msg["From"]    = addr
-        msg["To"]      = ", ".join(to_addrs)
-        msg.attach(MIMEText(message))
-        img = MIMEImage(image_bytes, _subtype="png")
-        img.add_header("Content-Disposition", "attachment",
-                       filename="reservatorio_panel.png")
-        msg.attach(img)
-    else:
-        msg = MIMEText(message)
-        msg["Subject"] = subject
-        msg["From"]    = addr
-        msg["To"]      = ", ".join(to_addrs)
-
+def resumo_agua() -> Tuple[str, bool]:
+    """Texto para a notificação e se o nível exige aviso por si só
+    (VIGILANCIA ou CONFIRMADO)."""
     try:
-        if smtp_port == 587:
-            with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as srv:
-                srv.starttls(); srv.login(addr, password)
-                srv.sendmail(addr, to_addrs, msg.as_string())
-        else:
-            with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30) as srv:
-                srv.login(addr, password)
-                srv.sendmail(addr, to_addrs, msg.as_string())
-        log.info("E-mail enviado para: %s", ", ".join(to_addrs))
-    except Exception as exc:
-        log.error("Erro e-mail: %s", exc)
+        obs = json.loads(AGUA_JSON.read_text(encoding="utf-8"))["observacao"]
+    except (OSError, ValueError, KeyError) as exc:
+        log.warning("Resumo da qualidade da água indisponível: %s", exc)
+        return "", False
+    try:
+        alerta_cfg = yaml.safe_load(CONFIG_YAML.read_text(encoding="utf-8"))["alerta"]
+    except (OSError, ValueError, KeyError, TypeError):
+        alerta_cfg = {}
+
+    nivel      = obs.get("nivel") or "NORMAL"
+    confirmado = obs.get("nivel_confirmado") == "SIM"
+    emoji  = {"CONFIRMADO": "🚨", "VIGILANCIA": "👀"}.get(nivel, "✅")
+    rotulo = {"CONFIRMADO": "ALERTA CONFIRMADO" if confirmado
+                            else "ALERTA (aguardando 2ª passagem)",
+              "VIGILANCIA": "VIGILÂNCIA"}.get(nivel, "NORMAL")
+
+    linhas = [f"💧 Qualidade da água — {obs.get('data', '?')}",
+              f"{emoji} Nível: {rotulo}  (confiança {obs.get('confianca', '?')})"]
+    agua = _num(obs.get("area_agua_ha"))
+    cob  = _num(obs.get("area_cobertura_flutuante_ha"))
+    if obs.get("area_confiavel") == "SIM" and agua is not None and cob is not None:
+        linhas.append(f"📐 Lâmina d'água {agua:.1f} ha | cobertura flutuante {cob:.1f} ha")
+    if nivel != "NORMAL" and obs.get("indices_concordantes"):
+        indices = obs["indices_concordantes"].replace(";", ", ").upper()
+        linhas.append(f"📈 Índices acima do padrão: {indices}")
+
+    chave = {"CONFIRMADO": "confirmado", "VIGILANCIA": "vigilancia"}.get(nivel)
+    mensagem = ((alerta_cfg.get(chave) or {}).get("mensagem") or "").strip() if chave else ""
+    if mensagem:
+        linhas.append(f"ℹ️ {mensagem}")
+    return "\n".join(linhas) + "\n", nivel in ("CONFIRMADO", "VIGILANCIA")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 11. SMOKE TEST
@@ -857,24 +812,12 @@ def smoke_test():
             f"Secrets obrigatórios não configurados: {', '.join(missing)}. "
             "Configure em Settings > Secrets and variables > Actions no GitHub."
         )
-    has_notif = any([
-        os.environ.get("TELEGRAM_BOT_TOKEN") and os.environ.get("TELEGRAM_CHAT_ID"),
-        os.environ.get("EMAIL_ADDRESS") and os.environ.get("EMAIL_APP_PASSWORD")
-            and os.environ.get("ALERT_EMAIL_TO"),
-        os.environ.get("WHATSAPP_PHONE") and os.environ.get("WHATSAPP_APIKEY"),
-    ])
-    if not has_notif:
+    active = notificacao.canais_ativos()
+    if not active:
         raise EnvironmentError(
             "Nenhum canal de notificação configurado. "
             "Configure pelo menos Telegram, e-mail ou WhatsApp nos secrets."
         )
-    active = [
-        name for name, cond in [
-            ("Telegram",  os.environ.get("TELEGRAM_BOT_TOKEN")),
-            ("E-mail",    os.environ.get("EMAIL_ADDRESS")),
-            ("WhatsApp",  os.environ.get("WHATSAPP_PHONE")),
-        ] if cond
-    ]
     log.info("Smoke test OK. Canais ativos: %s", ", ".join(active))
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -887,17 +830,19 @@ def main():
 
     smoke_test()
 
-    token  = get_access_token()
-    scenes = fetch_all_scenes(token)
+    cred   = credencial()
+    scenes = fetch_all_scenes(cred)
+    agua_txt, agua_relevante = resumo_agua()
 
     if not scenes:
         msg = (
             f"[São Lourenço] Nenhuma imagem Sentinel-2 com pixels válidos "
-            f"foi encontrada nos últimos {LOOKBACK_DAYS} dias."
+            f"foi encontrada nos últimos {LOOKBACK_DAYS} dias.\n"
         )
+        if agua_txt:
+            msg += "\n" + agua_txt
         log.warning(msg)
-        send_telegram(msg); send_email("Monitoramento São Lourenço – sem imagem", msg)
-        send_whatsapp(msg)
+        notificacao.todos("Monitoramento São Lourenço – sem imagem", msg)
         return
 
     best        = next(s for s in scenes if s["best"])
@@ -905,7 +850,7 @@ def main():
     roi_wgs84   = ROI_GEOJSON["features"][0]["geometry"]
 
     # Gera painel para a melhor cena (sempre)
-    best_panel = build_panel(token, best["date"], roi_wgs84)
+    best_panel = build_panel(cred, best["date"], roi_wgs84)
     save_panel_bytes(best_panel, best["date"], is_best=True)
 
     # Gera painéis para cenas adicionais ainda sem imagem no arquivo
@@ -915,7 +860,7 @@ def main():
         archive_path = ARCHIVE_IMG_DIR / sc["date"] / "panel.png"
         if not archive_path.exists():
             log.info("Gerando imagem de arquivo para %s...", sc["date"])
-            panel = build_panel(token, sc["date"], roi_wgs84)
+            panel = build_panel(cred, sc["date"], roi_wgs84)
             save_panel_bytes(panel, sc["date"], is_best=False)
 
     # Persiste todos os dados (atualiza has_image depois de gerar imagens)
@@ -958,17 +903,21 @@ def main():
             "Aguardando a próxima passagem para confirmar ou descartar.\n"
         )
 
+    if agua_txt:
+        message += "\n" + agua_txt
+
     log.info("Mensagem composta:\n%s", message)
 
     # Observações de baixa confiança continuam gravadas e visíveis no painel,
     # mas não disparam push: alerta falso recorrente faz o destinatário parar
-    # de olhar os alertas verdadeiros.
-    if _should_notify(confianca):
+    # de olhar os alertas verdadeiros. Vigilância ou alerta da qualidade da
+    # água avisa mesmo assim: esses níveis já exigem cena de confiança ALTA.
+    if _should_notify(confianca) or agua_relevante:
         log.info("Alerta confirmado por persistência: %s", confirmado)
-        send_telegram(message, image_bytes=best_panel)
-        send_email(f"Monitoramento São Lourenço – {status}", message,
-                   image_bytes=best_panel)
-        send_whatsapp(message)
+        assunto = f"Monitoramento São Lourenço – {status}"
+        if agua_relevante:
+            assunto += " | água: atenção"
+        notificacao.todos(assunto, message, best_panel)
     else:
         log.info(
             "Notificação suprimida: confiança %s abaixo do corte %s "

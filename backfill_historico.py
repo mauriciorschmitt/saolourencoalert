@@ -42,24 +42,22 @@ from monitor_ndvi import (
     MIN_VALID_FRACTION,
     EVALSCRIPT_INDICES,
     SH_STATS_URL,
-    get_access_token,
+    credencial,
     reproject_to_utm,
     check_anomaly,
     _status,
     _confidence,
-    _should_notify,
-    ALERT_Z_THRESHOLD,
-    ALERT_REQUIRE_PERSISTENCE,
+    recalcular_confirmacao,
     DATA_DIR,
     HISTORY_CSV,
     CSV_FIELDS,
 )
-import requests
+from src import sentinelhub as sh
 
 CHUNK_DAYS = 90  # keep each API request's date range modest
 
 
-def fetch_chunk(token, start, end):
+def fetch_chunk(cred, start, end):
     """One Statistical API call for a bounded date range. Returns a list of
     result dicts, same shape as monitor_ndvi.fetch_latest_metrics()'s
     candidates list."""
@@ -90,11 +88,10 @@ def fetch_chunk(token, start, end):
             "ndmi": {"statistics": {"default": {}}},
         },
     }
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    resp = requests.post(SH_STATS_URL, headers=headers, json=payload, timeout=120)
-    if not resp.ok:
-        raise RuntimeError(f"Statistical API returned {resp.status_code}: {resp.text}")
-    data = resp.json()
+    # Mesmo POST do módulo de qualidade da água: repete em 429/5xx e renova o
+    # token em 401 -- um backfill de ~40 requisições sequenciais passa da
+    # validade de um token só.
+    data = sh._post_com_retry(SH_STATS_URL, cred, payload)
 
     def stat(item, output_id):
         return item.get("outputs", {}).get(output_id, {}).get("bands", {}).get("B0", {}).get("stats")
@@ -144,14 +141,14 @@ def main():
     until = dt.date.fromisoformat(args.until)
 
     print(f"Backfilling {since} -> {until} in {CHUNK_DAYS}-day chunks...")
-    token = get_access_token()
+    cred = credencial()
 
     all_results = []
     failed_chunks = []
     for start, end in daterange_chunks(since, until, CHUNK_DAYS):
         print(f"  fetching {start} .. {end}")
         try:
-            chunk = fetch_chunk(token, start, end)
+            chunk = fetch_chunk(cred, start, end)
         except Exception as exc:  # noqa: BLE001
             # A single bad chunk (timeout, transient 5xx, etc.) shouldn't
             # kill a ~10-year backfill; log it and keep going, then report
@@ -206,27 +203,7 @@ def main():
     # quando duas observações QUALIFICADAS consecutivas ultrapassam o limiar.
     # Observações de baixa confiança são puladas (não confirmam nem quebram
     # a sequência) mas permanecem no arquivo.
-    prev_qualified_z = None
-    for date_key in sorted(by_date):
-        row = by_date[date_key]
-        try:
-            zz = float(row.get("zscore") or 0.0)
-            conf = row.get("confianca") or _confidence(
-                float(row.get("valid_fraction") or 0.0))
-        except (TypeError, ValueError):
-            row["alerta_confirmado"] = ""
-            continue
-        if not _should_notify(conf):
-            row["alerta_confirmado"] = "NAO"
-            continue
-        confirmado = (
-            zz >= ALERT_Z_THRESHOLD
-            and (not ALERT_REQUIRE_PERSISTENCE
-                 or (prev_qualified_z is not None
-                     and prev_qualified_z >= ALERT_Z_THRESHOLD))
-        )
-        row["alerta_confirmado"] = "SIM" if confirmado else "NAO"
-        prev_qualified_z = zz
+    recalcular_confirmacao(by_date)
 
     with open(HISTORY_CSV, "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")

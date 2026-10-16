@@ -14,11 +14,27 @@ A plataforma reúne dois módulos independentes sobre o mesmo reservatório:
 
 | Módulo | O que faz | Série |
 |---|---|---|
-| **Macrófitas** | Acompanha cobertura de vegetação flutuante por NDVI e gera painéis de imagem por data | 367 passagens desde jul/2016 |
-| **Qualidade da água** | Sete índices espectrais, alerta em dois níveis e medição de área em hectares | 367 passagens desde jul/2016 |
+| **Macrófitas** | Acompanha cobertura de vegetação flutuante por NDVI, gera painéis de imagem por data e envia os avisos | desde jul/2016 |
+| **Qualidade da água** | Sete índices espectrais, alerta em dois níveis e medição de área em hectares | desde jul/2016 |
 
-Cada um tem sua rotina, seu arquivo de série e seu fluxo agendado. Não
-compartilham nenhum arquivo de dados.
+Os dois rodam na mesma execução agendada, um depois do outro, e publicam
+num único commit. Cada um mantém seu próprio arquivo de série; o aviso
+enviado por Telegram e e-mail reúne os dois.
+
+---
+
+## Frequência de atualização
+
+| Etapa | Quando |
+|---|---|
+| Execução agendada | segunda e quinta, 09:17 UTC (06:17 BRT) — o GitHub pode atrasar algumas horas |
+| Janela consultada | últimos 30 dias a cada execução: nenhuma passagem se perde, e reprocessar a mesma data apenas a sobrescreve |
+| Passagens do Sentinel-2 | a cada 2 a 5 dias; cenas totalmente encobertas são descartadas, então a série tem em média uma observação a cada 5 dias |
+| Do satélite ao painel | até 3–4 dias, conforme o dia da passagem em relação à próxima execução |
+
+Para atualizar fora da agenda: aba **Actions** → *Monitoramento São
+Lourenço (agendado)* → **Run workflow**. A caixa *Enviar
+Telegram/e-mail/WhatsApp* permite rodar sem disparar avisos.
 
 ---
 
@@ -40,6 +56,11 @@ notificação e não produzem estimativa de área.
 
 **Validação de campo integrada.** Observações in loco entram por formulário
 e alimentam uma tabela de concordância que se acumula ao longo do tempo.
+
+**Aviso por Telegram e e-mail** a cada execução com cena aproveitável:
+leitura das macrófitas, painel de imagem e nível de alerta da qualidade da
+água. Vigilância ou alerta da água avisa mesmo quando a cena das macrófitas
+é de baixa confiança.
 
 ---
 
@@ -140,20 +161,21 @@ em medida.
 ```
 .
 ├── config.yaml                 parâmetros do módulo de qualidade da água
-├── monitor_ndvi.py             módulo de macrófitas
+├── monitor_ndvi.py             módulo de macrófitas e envio dos avisos
 ├── backfill_historico.py       reconstrução da série de macrófitas
 ├── apurar_numeros.py           apuração de indicadores operacionais
 ├── data/
 │   ├── roi.geojson             área de interesse — macrófitas
 │   ├── setores/represa.geojson área de interesse — qualidade da água
 │   └── campo.csv               observações in loco
-├── src/                        módulo de qualidade da água
+├── src/
+│   ├── sentinelhub.py          autenticação (com renovação do token), consulta e recuo do polígono
+│   ├── notificacao.py          Telegram, e-mail e WhatsApp
 │   ├── evalscripts.py          índices e máscaras de classificação
-│   ├── sentinelhub.py          autenticação, consulta e recuo do polígono
 │   ├── analise.py              climatologia, z-score, níveis, persistência
 │   ├── campo.py                validação contra observações de campo
 │   ├── registrar_campo.py      conversão de issue em registro
-│   └── monitor.py              orquestração
+│   └── monitor.py              orquestração da qualidade da água
 ├── docs/                       publicado via GitHub Pages
 │   ├── index.html              painel com as duas abas
 │   ├── macrofitas.html         painel original do módulo de macrófitas
@@ -161,17 +183,23 @@ em medida.
 │   ├── campo.html              formulário de campo (uso interno)
 │   ├── data/                   séries, metadados e validação
 │   └── images/                 painéis de imagem por data
-└── .github/workflows/
-    ├── ndvi_monitor.yml          macrófitas — segundas e quintas, 09:00 UTC
-    ├── backfill.yml              macrófitas — série histórica, manual
-    ├── agua.yml                  qualidade da água — segundas e quintas, 09:40 UTC
-    ├── agua_serie_historica.yml  qualidade da água — série histórica, manual
-    ├── registrar_campo.yml       converte issue de campo em registro
-    └── apurar.yml                apuração de indicadores, manual
+└── .github/
+    ├── workflows/
+    │   ├── monitoramento.yml     os dois módulos — segundas e quintas
+    │   ├── serie_historica.yml   reconstrução da série (água, macrófitas ou ambos), manual
+    │   ├── registrar_campo.yml   converte issue de campo em registro
+    │   └── apurar.yml            apuração de indicadores, manual
+    └── scripts/
+        ├── publicar.sh           commit e push com nova tentativa
+        └── avisar_falha.sh       aviso de falha no Telegram
 ```
 
-Os dois monitores publicam na mesma pasta, em arquivos distintos, e
-compartilham uma fila de concorrência para não disputarem o mesmo push.
+Os fluxos que gravam dados compartilham uma fila de concorrência
+(`publicacao-dados`) para não disputarem o mesmo push.
+
+O módulo de qualidade da água foi desenvolvido no repositório
+`saolourenco`, hoje arquivado; seu endereço antigo redireciona para este
+painel.
 
 ---
 
@@ -191,8 +219,8 @@ cliente OAuth em *Settings → OAuth clients*, e as credenciais em
 
 A camada gratuita tem cota mensal de unidades de processamento. O consumo
 cresce com o número de setores × execuções, não com o tamanho da série:
-reconstruir dez anos são cerca de 41 requisições; a operação corrente
-acrescenta cerca de 8 por mês.
+reconstruir dez anos são cerca de 41 requisições por módulo; a operação
+corrente acrescenta cerca de 8 por mês, mais as imagens dos painéis.
 
 ## Execução local
 
@@ -206,7 +234,7 @@ python monitor_ndvi.py                     # módulo de macrófitas
 ```
 
 Pelo navegador, sem instalar nada: aba **Actions**, escolha o fluxo e clique
-em **Run workflow**.
+em **Run workflow**. Localmente, `NOTIFICAR=0` roda sem enviar avisos.
 
 ## Replicar para outro reservatório
 

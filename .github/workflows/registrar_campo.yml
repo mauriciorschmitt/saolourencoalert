@@ -49,21 +49,10 @@ jobs:
           echo "resumo=$(tail -1 saida.txt)" >> "$GITHUB_OUTPUT"
 
       - name: Publicar no repositório
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/campo.csv
-          if git diff --cached --quiet; then
-            echo "Observação já registrada anteriormente."
-            exit 0
-          fi
-          git commit -m "campo: observação da issue #${{ github.event.issue.number }} [skip ci]"
-          for t in 1 2 3 4 5; do
-            if git pull --rebase --autostash origin "${GITHUB_REF_NAME}" \
-               && git push origin "HEAD:${GITHUB_REF_NAME}"; then exit 0; fi
-            sleep $((t * 5))
-          done
-          echo "::error::Não foi possível publicar."; exit 1
+        run: >-
+          bash .github/scripts/publicar.sh
+          "campo: observação da issue #${{ github.event.issue.number }} [skip ci]"
+          data/campo.csv
 
       - name: Confirmar na issue
         if: success()
