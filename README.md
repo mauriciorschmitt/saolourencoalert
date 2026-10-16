@@ -59,11 +59,11 @@ notificação e não produzem estimativa de área.
 **Validação de campo integrada.** Observações in loco entram por formulário
 e alimentam uma tabela de concordância que se acumula ao longo do tempo.
 
-**Aviso por Telegram e e-mail** a cada execução com cena aproveitável:
-leitura das macrófitas, painel de imagem, status do radar e nível de alerta
-da qualidade da água. Alerta do radar, ou vigilância/alerta da água, avisa
-mesmo quando a cena das macrófitas
-é de baixa confiança.
+**Um nível só, no topo da página.** Radar, qualidade da água e NDVI viram
+um semáforo — Normal, Vigilância ou Alerta — com o que fazer em cada caso.
+
+**Aviso por Telegram e e-mail quando o nível muda**, com lembrete a cada
+execução enquanto houver alerta e um resumo de rotina às segundas.
 
 ---
 
@@ -98,6 +98,55 @@ mesma passagem, em cena de alta confiança, em duas observações consecutivas.
 A concordância é o que separa alteração real de artefato de uma banda
 específica: o NDVI isolado produz 76 disparos na série; três índices
 concordando produzem 14, dos quais 13 pertencem ao evento conhecido.
+
+---
+
+## Nível único (semáforo)
+
+`src/alerta.py` roda por último e junta as leituras recentes num nível só,
+que a página mostra no topo e que decide os avisos.
+
+| Nível | Quando | O que fazer |
+|---|---|---|
+| 🟢 Normal | nenhum sinal | nada; o monitoramento segue automático |
+| 🟡 Vigilância | sinal ainda não confirmado: clorofila acima do padrão (vale por 60 dias), radar em atenção por duas passagens ou em alerta numa só, NDVI confirmado mas radar normal, ou área crescendo rápido no radar | visita de campo nas próximas semanas |
+| 🔴 Alerta | alerta **confirmado** no radar, na água (índices concordantes) ou no NDVI | verificação de campo e comunicar o responsável pela represa |
+
+Sobe assim que um sinal aparece. Para descer exige 3 execuções seguidas no
+nível mais baixo (≈ 10 dias), para o semáforo não piscar entre passagens.
+Cada leitura só conta enquanto é recente (radar 21 dias, água e NDVI 30) e
+de confiança suficiente.
+
+**Reproduzido sobre a série 2016–2026**, execução a execução:
+
+- evento de 2025: **Vigilância contínua desde 13/02/2025** e Alerta em
+  26/05/2025, mais de três meses de antecedência;
+- nenhum Alerta fora do evento. Os dois que haveria (mar/2018, fev/2020)
+  vinham só do NDVI, com o radar normal, e por isso ficam como Vigilância;
+- 8 Vigilâncias sem evento em seguida, cerca de 2 meses cada. É o preço da
+  antecipação: o sinal da clorofila acerta cerca de 1 em 6;
+- 23 mudanças de nível em 10 anos.
+
+### Avisos
+
+Configuráveis em `config.yaml`, seção `avisos`:
+
+- **mudança de nível**, para cima ou para baixo (entrar ou sair de "sem
+  leitura recente" não avisa);
+- **lembrete** a cada execução enquanto o nível for Alerta;
+- **resumo semanal** às segundas, para mostrar que o sistema está vivo.
+
+Na aba Actions, *Run workflow* com a caixa marcada força o envio; desmarcada,
+roda sem avisar ninguém.
+
+### Condições ambientais
+
+`src/clima.py` busca no Open-Meteo a chuva dos últimos 90 dias e a
+temperatura média dos últimos 30, comparadas com o normal da época do ano
+(ERA5, 2016–2024). Chuva forte leva nutrientes à represa; calor acelera o
+crescimento. Antes do surto de 2025 houve chuva muito acima do normal em
+dez/2024 e um fim de verão quente em fev–mar/2025 — mas é um evento só, e
+por isso as condições aparecem como **contexto** e não mudam o nível.
 
 ---
 
@@ -209,6 +258,8 @@ em medida.
 │   ├── sentinelhub.py          autenticação (com renovação do token), consulta e recuo do polígono
 │   ├── notificacao.py          Telegram, e-mail e WhatsApp
 │   ├── radar.py                radar Sentinel-1 — vegetação flutuante através das nuvens
+│   ├── clima.py                chuva e temperatura vs. normal (Open-Meteo)
+│   ├── alerta.py               nível único, política de avisos e mensagem
 │   ├── evalscripts.py          índices e máscaras de classificação
 │   ├── analise.py              climatologia, z-score, níveis, persistência
 │   ├── campo.py                validação contra observações de campo
@@ -269,7 +320,9 @@ export SH_CLIENT_ID=...  SH_CLIENT_SECRET=...
 python -m src.monitor                      # janela padrão de 30 dias
 python -m src.monitor --desde 2016-07-19   # série completa
 python -m src.radar                        # radar, janela de 30 dias
-python monitor_ndvi.py                     # módulo de macrófitas e avisos
+python -m src.clima                        # condições ambientais
+python monitor_ndvi.py                     # módulo de macrófitas
+NOTIFICAR=0 python -m src.alerta           # nível único, sem enviar avisos
 ```
 
 Pelo navegador, sem instalar nada: aba **Actions**, escolha o fluxo e clique

@@ -135,6 +135,28 @@ footer li{margin-bottom:6px;max-width:74ch}
 @media (prefers-reduced-motion:no-preference){
   .fade{animation:f .5s ease both}@keyframes f{from{opacity:0}to{opacity:1}}
 }
+/* ── semáforo (nível único) ── */
+.semaforo{background:var(--panel);border:1px solid var(--line);border-left:6px solid var(--muted);
+  padding:20px 22px;margin:0 0 30px}
+.semaforo.n-NORMAL{border-left-color:var(--algae)}
+.semaforo.n-VIGILANCIA{border-left-color:var(--silt)}
+.semaforo.n-ALERTA{border-left-color:var(--alert)}
+.sem-topo{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px 14px}
+.sem-luz{width:14px;height:14px;border-radius:50%;background:var(--muted);flex:none;
+  align-self:center}
+.n-NORMAL .sem-luz{background:var(--algae)} .n-VIGILANCIA .sem-luz{background:var(--silt)}
+.n-ALERTA .sem-luz{background:var(--alert)}
+.sem-nivel{font-family:var(--serif);font-size:clamp(24px,4vw,30px);font-weight:400;margin:0}
+.sem-desde{font-size:13px;color:var(--muted)}
+.sem-acao{margin:8px 0 0;font-size:15px;max-width:70ch}
+.sem-motivos{margin:10px 0 0;padding-left:18px;font-size:14px;color:var(--muted)}
+.sem-fontes{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:14px 22px;margin:18px 0 0;padding-top:16px;border-top:1px solid var(--line)}
+.sem-fonte .k{font-size:12px;color:var(--muted)}
+.sem-fonte .v{font-size:14px;margin-top:2px}
+.sem-fonte .v b{font-weight:600}
+.sem-fonte.vencida{opacity:.55}
+.sem-nota{font-size:12.5px;color:var(--muted);margin:14px 0 0;max-width:80ch}
 /* ── radar ── */
 .radar-linha{margin:14px 0 0;font-size:14px;color:var(--muted);max-width:60ch}
 .radar-linha b{color:var(--ink);font-weight:600}
@@ -720,8 +742,53 @@ function abaRadar(){
   </section>`;
 }
 
+// ── semáforo: nível único publicado por src/alerta.py ──────────────────────
+const ROT_NIVEL = {NORMAL:'Normal', VIGILANCIA:'Vigilância', ALERTA:'Alerta',
+                   SEM_DADOS:'Sem leitura recente'};
+const ddmm = s => s ? new Date(s+'T12:00:00').toLocaleDateString('pt-BR',
+  {day:'2-digit',month:'2-digit'}) : '—';
+
+function semaforo(){
+  const a = ESTADO.alerta; if(!a) return '';
+  const n = a.nivel || 'SEM_DADOS';
+  const cor = {NORMAL:'var(--algae)', VIGILANCIA:'var(--silt)', ALERTA:'var(--alert)'};
+  const fontes = (a.fontes||[]).map(f=>{
+    const extra = f.id==='radar' && f.area_ha!=null ? ` · ${fmt(f.area_ha,1)} ha`
+                : f.id==='macrofitas' && f.z!=null ? ` · z ${(f.z>0?'+':'')+fmt(f.z,1)}` : '';
+    return `<div class="sem-fonte ${f.valida?'':'vencida'}">
+      <div class="k">${f.nome}${f.data?' · '+ddmm(f.data):''}${f.valida?'':' · fora da validade'}</div>
+      <div class="v"><b style="color:${cor[f.nivel]||'var(--muted)'}">${ROT_NIVEL[f.nivel]||f.nivel}</b>
+        ${f.texto && f.texto!=="normal" ? "— "+f.texto : ""}${extra}</div></div>`;
+  }).join('');
+  const c = a.crescimento;
+  const cresc = c ? `<div class="sem-fonte"><div class="k">Ritmo no radar · ${ddmm(c.desde)} a ${ddmm(c.ate)}</div>
+      <div class="v"><b style="color:${c.acelerado?'var(--silt)':'inherit'}">${
+        (c.ha_semana>0?'+':'')+fmt(c.ha_semana,1)} ha/semana</b>${
+        c.acelerado?' — crescimento acelerado':''}</div></div>` : '';
+  const cl = a.clima;
+  const condicao = cl && cl.chuva ? `<div class="sem-fonte"><div class="k">Condições para macrófitas · contexto</div>
+      <div class="v"><b style="color:${cl.condicao==='NEUTRA'?'inherit':'var(--silt)'}">${
+        {MUITO_FAVORAVEL:'Muito favoráveis',FAVORAVEL:'Favoráveis',NEUTRA:'Neutras'}[cl.condicao]||'—'}</b>
+        — chuva de ${cl.chuva.dias} dias em ${cl.chuva.pct_normal!=null?fmt(cl.chuva.pct_normal,0)+'%':'—'}
+        do normal; temperatura ${cl.temperatura.media_c!=null?fmt(cl.temperatura.media_c,1)+' °C':'—'}
+        (normal ${cl.temperatura.normal_c!=null?fmt(cl.temperatura.normal_c,1)+' °C':'—'})</div></div>` : '';
+  return `<section class="semaforo n-${n}" aria-label="Situação atual da represa">
+    <div class="sem-topo">
+      <span class="sem-luz" aria-hidden="true"></span>
+      <h2 class="sem-nivel">${ROT_NIVEL[n]||n}</h2>
+      <span class="sem-desde">desde ${dataBR(a.desde)}</span>
+    </div>
+    <p class="sem-acao">${a.o_que_fazer||''}</p>
+    ${a.motivos && a.motivos.length ? `<ul class="sem-motivos">${a.motivos.map(m=>`<li>${m}</li>`).join('')}</ul>` : ''}
+    <div class="sem-fontes">${fontes}${cresc}${condicao}</div>
+    <p class="sem-nota">O nível junta radar, qualidade da água e NDVI. Sobe assim que
+      um sinal aparece; para descer, precisa de cerca de dez dias sem ele.
+      As condições ambientais são contexto e não mudam o nível.</p>
+  </section>`;
+}
+
 // ── montagem ───────────────────────────────────────────────────────────────
-let ESTADO = {linhas:[], resumo:null, geo:null, indice:null, aba:'agua', radar:null};
+let ESTADO = {linhas:[], resumo:null, geo:null, indice:null, aba:'agua', radar:null, alerta:null};
 let ANT = null;   // dados do sistema de macrófitas, carregados sob demanda
 
 function render(){
@@ -778,6 +845,8 @@ function render(){
     <p class="sub">${resumo.local.municipio}/${resumo.local.uf} · leitura de
       ${dataBR(u.data)} · ${linhas.length} passagens registradas</p>
   </header>
+
+  ${semaforo()}
 
   <nav class="abas" role="tablist">
     <button class="aba" role="tab" id="tab-agua" data-aba="agua"
@@ -894,10 +963,11 @@ window.addEventListener('resize', ()=>{
     // Radar é opcional: sem o arquivo, a aba simplesmente não aparece.
     const csvRadar = await tentar('radar.csv','texto');
     const radar = csvRadar ? parseCSV(csvRadar).filter(r=>r.data) : null;
+    const alerta = await tentar('alerta.json');     // semáforo é opcional
 
     // Preserva o que já estava no estado — sobretudo `aba`. Recriar o
     // objeto do zero apagava esse campo e a página abria na aba errada.
-    ESTADO = {...ESTADO, linhas, resumo, geo, radar,
+    ESTADO = {...ESTADO, linhas, resumo, geo, radar, alerta,
               indice: Object.keys(resumo.indices)[0]};
     if(!ESTADO.indice) throw new Error(
       'O CSV não tem nenhuma coluna de índice reconhecida.');
