@@ -1,0 +1,34 @@
+name: Explorar radar Sentinel-1 (temporário)
+
+# Só roda em push para a branch explora-radar. Não grava nada no repositório:
+# o resultado sai no log e como artefato. Será removido antes do merge.
+on:
+  push:
+    branches: [explora-radar]
+
+permissions:
+  contents: read
+
+jobs:
+  explorar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Explorar
+        env:
+          SH_CLIENT_ID:     ${{ secrets.SH_CLIENT_ID }}
+          SH_CLIENT_SECRET: ${{ secrets.SH_CLIENT_SECRET }}
+        run: python explorar_radar.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: radar-exploracao
+          path: radar_exploracao.csv
+          if-no-files-found: ignore
+          retention-days: 7
