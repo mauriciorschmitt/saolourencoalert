@@ -1,0 +1,27 @@
+{
+  "atualizado_em": "2026-10-16T19:06:29.116608+00:00",
+  "data": "2026-10-16",
+  "condicao": "FAVORAVEL",
+  "fatores": [
+    "chuva"
+  ],
+  "chuva": {
+    "dias": 90,
+    "mm": 684.0,
+    "normal_mm": 336.0,
+    "pct_normal": 203.0,
+    "z": 2.97
+  },
+  "temperatura": {
+    "dias": 30,
+    "media_c": 17.0,
+    "normal_c": 17.0,
+    "z": 0.06
+  },
+  "previsao_7d": {
+    "media_c": 15.2,
+    "normal_c": 17.7
+  },
+  "fonte": "Open-Meteo: previsão (situação atual) e reanálise ERA5 2016–2024 (normais)",
+  "nota": "Contexto, não alerta. Chuva forte leva nutrientes à represa e calor acelera o crescimento das macrófitas; a relação com infestações foi observada em um único evento (2025)."
+}

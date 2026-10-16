@@ -1,0 +1,84 @@
+{
+  "nivel_calculado": "NORMAL",
+  "fontes": [
+    {
+      "id": "radar",
+      "nome": "Radar",
+      "data": "2026-10-12",
+      "nivel": "NORMAL",
+      "valida": true,
+      "texto": "normal",
+      "area_ha": 8.12,
+      "z": -1.477
+    },
+    {
+      "id": "agua",
+      "nome": "Qualidade da água",
+      "data": "2026-10-07",
+      "nivel": "NORMAL",
+      "valida": true,
+      "texto": "normal",
+      "indices": "fai"
+    },
+    {
+      "id": "macrofitas",
+      "nome": "Macrófitas (NDVI)",
+      "data": "2026-10-07",
+      "nivel": "NORMAL",
+      "texto": "normal",
+      "confianca": "ALTA",
+      "valida": true,
+      "z": 0.8835,
+      "ndvi": 0.055743154630865384,
+      "nuvens_pct": 14.3
+    }
+  ],
+  "crescimento": {
+    "ha_semana": -0.81,
+    "desde": "2026-09-23",
+    "ate": "2026-10-12",
+    "passagens": 4,
+    "acelerado": false
+  },
+  "motivos": [],
+  "clima": {
+    "atualizado_em": "2026-10-16T19:06:29.116608+00:00",
+    "data": "2026-10-16",
+    "condicao": "FAVORAVEL",
+    "fatores": [
+      "chuva"
+    ],
+    "chuva": {
+      "dias": 90,
+      "mm": 684.0,
+      "normal_mm": 336.0,
+      "pct_normal": 203.0,
+      "z": 2.97
+    },
+    "temperatura": {
+      "dias": 30,
+      "media_c": 17.0,
+      "normal_c": 17.0,
+      "z": 0.06
+    },
+    "previsao_7d": {
+      "media_c": 15.2,
+      "normal_c": 17.7
+    },
+    "fonte": "Open-Meteo: previsão (situação atual) e reanálise ERA5 2016–2024 (normais)",
+    "nota": "Contexto, não alerta. Chuva forte leva nutrientes à represa e calor acelera o crescimento das macrófitas; a relação com infestações foi observada em um único evento (2025)."
+  },
+  "nivel": "NORMAL",
+  "pendente": null,
+  "mudou_de": null,
+  "desde": "2026-10-16",
+  "o_que_fazer": "Nenhuma ação necessária. O monitoramento segue automático.",
+  "historico": [
+    {
+      "data": "2026-10-16",
+      "nivel": "NORMAL"
+    }
+  ],
+  "atualizado_em": "2026-10-16T19:06:34.674475+00:00",
+  "ultimo_aviso_em": null
+}
