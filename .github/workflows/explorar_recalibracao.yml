@@ -1,0 +1,39 @@
+name: Explorar recalibração (temporário)
+
+# Só roda em push para a branch recalibracao. Não grava nada no repositório
+# nem envia avisos: o resultado sai como artefato. Será removido antes do merge.
+on:
+  push:
+    branches: [recalibracao]
+
+permissions:
+  contents: read
+
+jobs:
+  explorar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      SH_CLIENT_ID:     ${{ secrets.SH_CLIENT_ID }}
+      SH_CLIENT_SECRET: ${{ secrets.SH_CLIENT_SECRET }}
+      NOTIFICAR: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Macrófitas com recuo — série completa e climatologia nova
+        run: python backfill_historico.py --since 2016-07-19 --substituir
+      - name: Limiares ópticos candidatos
+        run: python explorar_limiares.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: recalibracao
+          path: |
+            docs/data/historico.csv
+            data/climatologia_macrofitas.json
+            limiares_exploracao.csv
+          retention-days: 7

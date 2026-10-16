@@ -216,6 +216,15 @@ alerta:
     - indices: ["ndci", "ndti"]
       rotulo: "Alteração da qualidade da água"
 
+# ── Macrófitas (monitor_ndvi.py) ───────────────────────────────────────────
+# Mesmo polígono e mesmo recuo da qualidade da água. Ao mudar o recuo,
+# ajuste pixels_referencia (maior contagem de pixels válidos em céu limpo) e
+# reconstrua a série com `backfill_historico.py --substituir`, que também
+# recalcula a climatologia.
+macrofitas:
+  recuo_borda_m: 10
+  pixels_referencia: 7334
+
 # ── Radar (Sentinel-1) ─────────────────────────────────────────────────────
 # O radar enxerga através das nuvens: na estação chuvosa o óptico chega a
 # ficar 20 dias sem cena aproveitável, justamente quando a infestação cresce.

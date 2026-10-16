@@ -43,7 +43,9 @@ from monitor_ndvi import (
     EVALSCRIPT_INDICES,
     SH_STATS_URL,
     credencial,
-    reproject_to_utm,
+    RECUO_BORDA_M,
+    CLIMATOLOGY_PATH,
+    _CFG,
     check_anomaly,
     _status,
     _confidence,
@@ -62,7 +64,7 @@ def fetch_chunk(cred, start, end):
     result dicts, same shape as monitor_ndvi.fetch_latest_metrics()'s
     candidates list."""
     roi_geometry_wgs84 = ROI_GEOJSON["features"][0]["geometry"]
-    roi_geometry_utm, utm_epsg = reproject_to_utm(roi_geometry_wgs84)
+    roi_geometry_utm, utm_epsg = sh.reprojetar_utm(roi_geometry_wgs84, RECUO_BORDA_M)
 
     payload = {
         "input": {
@@ -123,6 +125,41 @@ def fetch_chunk(cred, start, end):
     return out
 
 
+def recalcular_climatologia(resultados):
+    """Média e desvio do NDVI por mês sobre as cenas de confiança ALTA no
+    período de referência de config.yaml, que exclui o evento de 2025.
+    Grava data/climatologia_macrofitas.json e atualiza a usada neste
+    processo, para que os z-scores abaixo já saiam com ela."""
+    import json
+    import statistics
+    import monitor_ndvi
+
+    ref = _CFG["climatologia"]
+    meses = {}
+    for r in resultados:
+        if not (ref["referencia_inicio"] <= r["date"] <= ref["referencia_fim"]):
+            continue
+        if _confidence(r["valid_fraction"]) != "ALTA" or r["ndvi"] is None:
+            continue
+        meses.setdefault(int(r["date"][5:7]), []).append(r["ndvi"])
+    clim = {m: {"mean": statistics.fmean(v), "sd": statistics.stdev(v), "n": len(v)}
+            for m, v in sorted(meses.items()) if len(v) >= 2}
+    if len(clim) < 12:
+        raise SystemExit(f"Climatologia incompleta ({len(clim)} meses); nada gravado.")
+    CLIMATOLOGY_PATH.write_text(json.dumps({
+        "descricao": "NDVI médio e desvio por mês, cenas de confiança ALTA",
+        "periodo": [ref["referencia_inicio"], ref["referencia_fim"]],
+        "recuo_borda_m": RECUO_BORDA_M,
+        "gerado_em": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "meses": {str(m): v for m, v in clim.items()},
+    }, indent=2), encoding="utf-8")
+    monitor_ndvi.MONTHLY_CLIMATOLOGY.clear()
+    monitor_ndvi.MONTHLY_CLIMATOLOGY.update(clim)
+    print("Climatologia recalculada (recuo %g m):" % RECUO_BORDA_M)
+    for m, v in clim.items():
+        print(f"  mês {m:2d}: NDVI {v['mean']:+.4f} ± {v['sd']:.4f} (n={v['n']})")
+
+
 def daterange_chunks(since, until, chunk_days):
     cur = since
     while cur <= until:
@@ -135,6 +172,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--since", default="2016-07-19")
     parser.add_argument("--until", default=dt.date.today().isoformat())
+    parser.add_argument("--substituir", action="store_true",
+                        help="descarta a série existente em vez de mesclar e "
+                             "recalcula a climatologia de referência; use ao "
+                             "mudar polígono, recuo ou máscara")
     args = parser.parse_args()
 
     since = dt.date.fromisoformat(args.since)
@@ -183,7 +224,10 @@ def main():
     if os.path.exists(HISTORY_CSV):
         with open(HISTORY_CSV, "r", encoding="utf-8", newline="") as f:
             existing = list(csv.DictReader(f))
-    by_date = {r["date"]: r for r in existing if r.get("date")}
+    by_date = {} if args.substituir else {r["date"]: r for r in existing if r.get("date")}
+
+    if args.substituir:
+        recalcular_climatologia(all_results)
 
     for result in all_results:
         z, _ = check_anomaly(result["date"], result["ndvi"])
