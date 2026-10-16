@@ -1,0 +1,20 @@
+{
+  "observacao": {
+    "data": "2026-10-12",
+    "pixels_validos": 7334,
+    "fracao_valida": 1.0,
+    "confianca": "ALTA",
+    "vh_db_mediana": -25.195,
+    "vv_db_mediana": -21.686,
+    "frac_vegetacao": 0.1107,
+    "area_vegetacao_ha": 8.12,
+    "frac_vegetacao_z": -1.477,
+    "frac_vegetacao_status": "NORMAL",
+    "frac_vegetacao_confirmado": "NAO"
+  },
+  "atualizado_em": "2026-10-16T18:42:58.392100+00:00",
+  "limiar_vh_db": -20.0,
+  "z_atencao": 2.0,
+  "z_alerta": 3.0,
+  "orbita": "DESCENDING"
+}
