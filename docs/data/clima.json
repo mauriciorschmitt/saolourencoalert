@@ -1,5 +1,5 @@
 {
-  "atualizado_em": "2026-10-16T19:06:29.116608+00:00",
+  "atualizado_em": "2026-10-16T20:10:31.408070+00:00",
   "data": "2026-10-16",
   "condicao": "FAVORAVEL",
   "fatores": [
@@ -7,19 +7,19 @@
   ],
   "chuva": {
     "dias": 90,
-    "mm": 684.0,
+    "mm": 689.0,
     "normal_mm": 336.0,
-    "pct_normal": 203.0,
-    "z": 2.97
+    "pct_normal": 205.0,
+    "z": 3.02
   },
   "temperatura": {
     "dias": 30,
     "media_c": 17.0,
     "normal_c": 17.0,
-    "z": 0.06
+    "z": 0.04
   },
   "previsao_7d": {
-    "media_c": 15.2,
+    "media_c": 15.0,
     "normal_c": 17.7
   },
   "fonte": "Open-Meteo: previsão (situação atual) e reanálise ERA5 2016–2024 (normais)",
