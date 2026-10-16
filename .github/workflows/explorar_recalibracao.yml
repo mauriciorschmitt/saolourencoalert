@@ -1,7 +1,8 @@
-name: Explorar recalibração (temporário)
+name: Testar recalibração (temporário)
 
 # Só roda em push para a branch recalibracao. Não grava nada no repositório
-# nem envia avisos: o resultado sai como artefato. Será removido antes do merge.
+# nem envia avisos: reconstrói as séries com a configuração nova e devolve
+# docs/data como artefato. Será removido antes do merge.
 on:
   push:
     branches: [recalibracao]
@@ -10,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  explorar:
+  testar:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -24,16 +25,19 @@ jobs:
           python-version: "3.11"
           cache: pip
       - run: pip install -r requirements.txt
-      - name: Macrófitas com recuo — série completa e climatologia nova
+      - name: Qualidade da água — série completa, classificação nova
+        run: python -m src.monitor --desde 2016-07-19
+      - name: Macrófitas — série completa com recuo
         run: python backfill_historico.py --since 2016-07-19 --substituir
-      - name: Limiares ópticos candidatos
-        run: python explorar_limiares.py
+      - name: Macrófitas — execução normal (ultimo.json)
+        run: python monitor_ndvi.py
+      - name: Nível único
+        run: python -m src.alerta
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: recalibracao
+          name: recalibracao-final
           path: |
-            docs/data/historico.csv
+            docs/data
             data/climatologia_macrofitas.json
-            limiares_exploracao.csv
           retention-days: 7

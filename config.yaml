@@ -102,26 +102,39 @@ indices:
 # Além da média, o sistema conta pixels que cruzam um limiar. É isso que
 # converte índice em área: hectares de água, hectares de cobertura flutuante.
 #
-# ATENÇÃO: diferentemente do z-score, estes limiares são ABSOLUTOS — não se
-# ajustam ao comportamento histórico da represa. São, portanto, os
-# parâmetros que mais precisam de calibração. O evento de 2025, com imagens
-# de alta resolução disponíveis para conferência, é o padrão-ouro para isso.
+# Estes limiares são ABSOLUTOS — não se ajustam ao histórico — e por isso
+# foram calibrados contra o radar (Sentinel-1), que mede vegetação flutuante
+# sem depender de cor da água nem de nuvem. Recalibração de out/2026, sobre
+# 124 pares de cena óptica limpa e passagem de radar com até 3 dias:
 #
-# Na série atual, anos sem evento produzem de 3,6 a 7,7 ha de "cobertura
-# flutuante", valor que provavelmente reflete pixels de borda e não
-# macrófita. Reduzir esse piso é o principal ganho de calibração.
+#   cobertura flutuante   correlação   erro médio   viés     anos normais
+#   FAI > 0,02 (antiga)      0,73        6,7 ha     +3,1 ha   12,6 ± 12,6 ha
+#   NDVI > 0,2 e FAI > 0,02  0,89        4,7 ha     −0,1 ha    9,1 ±  6,3 ha
+#   (radar, referência)        —           —          —       10,6 ±  2,3 ha
+#
+# A regra antiga confundia água barrenta com vegetação: FAI sobe com
+# sedimento em suspensão. Em 07/10/2026 marcava 52 ha e em 19/07/2016, 73 ha,
+# com o radar normal nas duas datas; a regra nova marca 0,1 e 0,0 ha. Exigir
+# NDVI > 0,2 junto é o que separa planta (clorofila) de sedimento.
+#
+# Lâmina d'água: NDWI > 0 marcava quase nada de água em cenas limpas
+# (0,1 ha em 19/07/2016). NDVI < 0,1 acompanha "área − vegetação do radar"
+# com viés de −0,4 ha. Pixels com NDVI entre 0,1 e 0,2 não entram em nenhuma
+# das duas: são transição (margem, vegetação esparsa).
+#
+# Floração (NDCI) não foi recalibrada: não há referência independente.
 classificacao:
   agua:
-    indice: "ndwi"
-    limiar: 0.0            # NDWI > 0 → água
-    operador: "maior"
+    indice: "ndvi"
+    limiar: 0.1            # NDVI < 0,1 → água livre
+    operador: "menor"
   cobertura_flutuante:
-    indice: "fai"
-    limiar: 0.02           # calibrar contra o evento de 2025
-    operador: "maior"
+    condicoes:             # as duas ao mesmo tempo
+      - {indice: "ndvi", limiar: 0.2,  operador: "maior"}
+      - {indice: "fai",  limiar: 0.02, operador: "maior"}
   floracao:
     indice: "ndci"
-    limiar: 0.10           # calibrar; sem campo é apenas relativo
+    limiar: 0.10           # sem campo, apenas relativo
     operador: "maior"
 
 # ── Setores de monitoramento ───────────────────────────────────────────────
