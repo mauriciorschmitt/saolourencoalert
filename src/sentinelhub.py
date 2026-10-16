@@ -79,6 +79,35 @@ def get_token() -> str:
     )
 
 
+class Credencial:
+    """Token OAuth que se renova sozinho.
+
+    O token do CDSE vale cerca de 10 minutos. Uma reconstrução da série
+    inteira faz dezenas de requisições de até 3 minutos cada e passa disso
+    com folga; sem renovação, os blocos finais voltariam 401 e seriam
+    registrados como falha. Renova por idade, antes de expirar, e também ao
+    receber 401, caso o servidor encurte a validade.
+    """
+
+    VIDA_UTIL_S = 8 * 60
+
+    def __init__(self) -> None:
+        self._token = ""
+        self._obtido_em = 0.0
+
+    def valor(self) -> str:
+        if not self._token or time.monotonic() - self._obtido_em > self.VIDA_UTIL_S:
+            self.renovar()
+        return self._token
+
+    def renovar(self) -> None:
+        self._token = get_token()
+        self._obtido_em = time.monotonic()
+
+    def cabecalho(self) -> dict:
+        return {"Authorization": f"Bearer {self.valor()}"}
+
+
 # ── geometria ──────────────────────────────────────────────────────────────
 
 def utm_epsg(lon: float, lat: float) -> int:
@@ -156,9 +185,11 @@ def area_pixel_ha(resolucao_m: int) -> float:
 
 # ── consulta ───────────────────────────────────────────────────────────────
 
-def _post_com_retry(url: str, headers: dict, payload: dict) -> dict:
+def _post_com_retry(url: str, cred: Credencial, payload: dict) -> dict:
     ultimo = None
+    renovado = False
     for tentativa in range(1, MAX_RETRIES + 1):
+        headers = {**cred.cabecalho(), "Content-Type": "application/json"}
         try:
             r = requests.post(url, headers=headers, json=payload, timeout=TIMEOUT)
         except requests.RequestException as exc:
@@ -166,6 +197,11 @@ def _post_com_retry(url: str, headers: dict, payload: dict) -> dict:
         else:
             if r.ok:
                 return r.json()
+            if r.status_code == 401 and not renovado:
+                log.info("Token recusado (401); renovando e repetindo.")
+                cred.renovar()
+                renovado = True
+                continue
             # 429 e 5xx são transitórios; 4xx restantes não adianta repetir.
             if r.status_code != 429 and r.status_code < 500:
                 raise SentinelHubError(f"HTTP {r.status_code}: {r.text[:300]}")
@@ -177,7 +213,7 @@ def _post_com_retry(url: str, headers: dict, payload: dict) -> dict:
     raise SentinelHubError(f"Esgotadas as tentativas: {ultimo}")
 
 
-def consultar(token: str, geometria: dict, evalscript: str,
+def consultar(cred: Credencial, geometria: dict, evalscript: str,
               inicio: dt.date, fim: dt.date, saidas: Iterable[str],
               colecao: str = "sentinel-2-l2a", resolucao: int = 10,
               recuo_m: float = 0.0) -> List[dict]:
@@ -212,10 +248,7 @@ def consultar(token: str, geometria: dict, evalscript: str,
         },
         "calculations": calculos,
     }
-    headers = {"Authorization": f"Bearer {token}",
-               "Content-Type": "application/json"}
-
-    dados = _post_com_retry(STATS_URL, headers, payload)
+    dados = _post_com_retry(STATS_URL, cred, payload)
     return dados.get("data", [])
 
 

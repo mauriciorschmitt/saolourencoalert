@@ -1,0 +1,3 @@
+# Scripts de shell rodam no runner Linux: CRLF quebra o bash.
+*.sh  text eol=lf
+*.yml text eol=lf

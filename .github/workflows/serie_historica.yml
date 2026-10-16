@@ -1,0 +1,77 @@
+name: Reconstruir série histórica (manual)
+
+# Operação pesada e pontual: reconstrói a série desde 2016. Não roda por
+# agenda e não envia notificação. Use depois de alterar polígono, setores,
+# índices ou limiares, ou para preencher um intervalo que falhou.
+
+on:
+  workflow_dispatch:
+    inputs:
+      modulo:
+        description: "Qual série reconstruir"
+        type: choice
+        options: [ambos, agua, macrofitas]
+        default: ambos
+      desde:
+        description: "Data inicial (AAAA-MM-DD)"
+        required: false
+        default: "2016-07-19"
+      ate:
+        description: "Data final — em branco usa hoje"
+        required: false
+        default: ""
+      setor:
+        description: "Qualidade da água: setor específico — em branco processa todos"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publicacao-dados
+  cancel-in-progress: false
+
+jobs:
+  construir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    # Entradas passam por variável de ambiente, nunca interpoladas direto no
+    # script: assim um valor digitado não vira comando de shell.
+    env:
+      SH_CLIENT_ID:     ${{ secrets.SH_CLIENT_ID }}
+      SH_CLIENT_SECRET: ${{ secrets.SH_CLIENT_SECRET }}
+      MODULO: ${{ inputs.modulo }}
+      DESDE:  ${{ inputs.desde }}
+      ATE:    ${{ inputs.ate }}
+      SETOR:  ${{ inputs.setor }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # rebase precisa do histórico
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+
+      - name: Qualidade da água
+        if: inputs.modulo != 'macrofitas'
+        run: |
+          ARGS=(--desde "$DESDE")
+          [ -n "$ATE" ]   && ARGS+=(--ate "$ATE")
+          [ -n "$SETOR" ] && ARGS+=(--setor "$SETOR")
+          python -m src.monitor "${ARGS[@]}"
+
+      - name: Macrófitas
+        if: inputs.modulo != 'agua'
+        run: |
+          ARGS=(--since "$DESDE")
+          [ -n "$ATE" ] && ARGS+=(--until "$ATE")
+          python backfill_historico.py "${ARGS[@]}"
+
+      - name: Publicar séries
+        run: >-
+          bash .github/scripts/publicar.sh
+          "dados: reconstrói série histórica (${{ inputs.modulo }}) [skip ci]"
+          docs/data
