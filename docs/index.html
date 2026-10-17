@@ -135,6 +135,11 @@ footer li{margin-bottom:6px;max-width:74ch}
 @media (prefers-reduced-motion:no-preference){
   .fade{animation:f .5s ease both}@keyframes f{from{opacity:0}to{opacity:1}}
 }
+/* ── aviso de dados atrasados ── */
+.atraso{border:1px solid var(--alert);border-left-width:6px;background:var(--panel);
+  padding:14px 18px;margin:0 0 20px;font-size:14.5px}
+.atraso b{color:var(--alert)}
+.semaforo.desatualizado{opacity:.6}
 /* ── semáforo (nível único) ── */
 .semaforo{background:var(--panel);border:1px solid var(--line);border-left:6px solid var(--muted);
   padding:20px 22px;margin:0 0 30px}
@@ -749,6 +754,33 @@ const ROT_NIVEL = {NORMAL:'Normal', VIGILANCIA:'Vigilância', ALERTA:'Alerta',
 const ddmm = s => s ? new Date(s+'T12:00:00').toLocaleDateString('pt-BR',
   {day:'2-digit',month:'2-digit'}) : '—';
 
+// O monitoramento roda segunda e quinta: o maior intervalo normal entre
+// atualizações é de 4 dias, mais o atraso do agendador do GitHub. Passando
+// disso, algo parou — e uma página parada mostrando "Normal" é pior que uma
+// página sem dados, porque transmite uma segurança que ninguém está medindo.
+const ATRASO_MAX_DIAS = 5;
+
+function diasDesde(iso){
+  const t = Date.parse(iso || '');
+  return Number.isFinite(t) ? (Date.now() - t) / 864e5 : null;
+}
+
+function idadeDados(){
+  const a = ESTADO.alerta, r = ESTADO.resumo;
+  return diasDesde(a && a.atualizado_em) ?? diasDesde(r && r.atualizado_em);
+}
+
+function avisoAtraso(){
+  const d = idadeDados();
+  if(d === null || d <= ATRASO_MAX_DIAS) return '';
+  const quando = new Date(Date.now() - d*864e5).toLocaleDateString('pt-BR',
+    {day:'numeric', month:'long'});
+  return `<div class="atraso" role="alert"><b>Dados atrasados.</b> A última
+    atualização foi em ${quando}, há ${Math.floor(d)} dias. O monitoramento
+    automático pode ter parado: as leituras abaixo podem não refletir a
+    situação atual da represa.</div>`;
+}
+
 function semaforo(){
   const a = ESTADO.alerta; if(!a) return '';
   const n = a.nivel || 'SEM_DADOS';
@@ -773,7 +805,8 @@ function semaforo(){
         — chuva de ${cl.chuva.dias} dias em ${cl.chuva.pct_normal!=null?fmt(cl.chuva.pct_normal,0)+'%':'—'}
         do normal; temperatura ${cl.temperatura.media_c!=null?fmt(cl.temperatura.media_c,1)+' °C':'—'}
         (normal ${cl.temperatura.normal_c!=null?fmt(cl.temperatura.normal_c,1)+' °C':'—'})</div></div>` : '';
-  return `<section class="semaforo n-${n}" aria-label="Situação atual da represa">
+  const velho = (idadeDados() ?? 0) > ATRASO_MAX_DIAS;
+  return `<section class="semaforo n-${n}${velho?' desatualizado':''}" aria-label="Situação atual da represa">
     <div class="sem-topo">
       <span class="sem-luz" aria-hidden="true"></span>
       <h2 class="sem-nivel">${ROT_NIVEL[n]||n}</h2>
@@ -847,6 +880,7 @@ function render(){
       ${dataBR(u.data)} · ${linhas.length} passagens registradas</p>
   </header>
 
+  ${avisoAtraso()}
   ${semaforo()}
 
   <nav class="abas" role="tablist">

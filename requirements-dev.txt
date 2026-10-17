@@ -1,0 +1,3 @@
+# Só para os testes (tests/). O monitoramento não precisa disto.
+-r requirements.txt
+pytest==9.1.1
