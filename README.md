@@ -304,7 +304,8 @@ em medida.
     │   ├── monitoramento.yml     os dois módulos — segundas e quintas
     │   ├── serie_historica.yml   reconstrução da série (água, radar, macrófitas ou todos), manual
     │   ├── registrar_campo.yml   converte issue de campo em registro
-    │   └── apurar.yml            apuração de indicadores, manual
+    │   ├── apurar.yml            apuração de indicadores, manual
+    │   └── testes.yml            testes a cada push e PR
     └── scripts/
         ├── publicar.sh           commit e push com nova tentativa
         └── avisar_falha.sh       aviso de falha no Telegram
@@ -354,6 +355,28 @@ NOTIFICAR=0 python -m src.alerta           # nível único, sem enviar avisos
 
 Pelo navegador, sem instalar nada: aba **Actions**, escolha o fluxo e clique
 em **Run workflow**. Localmente, `NOTIFICAR=0` roda sem enviar avisos.
+
+## Testes e manutenção
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest -q
+```
+
+Os testes (`tests/`) rodam a cada push e PR, sem acessar a rede: Sentinel
+Hub, Open-Meteo, Telegram e e-mail são simulados (`tests/rede_simulada.py`).
+Cobrem o nível único e a política de avisos, a classificação calibrada, a
+renovação do token e o workflow agendado de ponta a ponta, numa cópia
+temporária do repositório.
+
+As dependências têm versão fixa em `requirements.txt`, inclusive as
+indiretas, para que uma atualização externa não quebre o monitoramento sem
+ninguém ter mudado nada. O Dependabot abre um PR por mês com atualizações de
+dependências e das actions do GitHub; os testes rodam nele antes do merge.
+
+Se o monitoramento parar, a página avisa: com mais de 5 dias sem
+atualização, um aviso de **dados atrasados** aparece acima do semáforo, que
+fica esmaecido.
 
 ## Replicar para outro reservatório
 

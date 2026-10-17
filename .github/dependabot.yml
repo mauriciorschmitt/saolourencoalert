@@ -1,0 +1,23 @@
+# PRs mensais de atualização. Nada entra sozinho: cada PR roda os testes
+# (.github/workflows/testes.yml) e espera revisão.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: monthly
+    groups:
+      dependencias:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "actions"
