@@ -42,8 +42,8 @@
   },
   "motivos": [],
   "clima": {
-    "atualizado_em": "2026-10-16T20:10:31.408070+00:00",
-    "data": "2026-10-16",
+    "atualizado_em": "2026-10-17T00:52:22.495538+00:00",
+    "data": "2026-10-17",
     "condicao": "FAVORAVEL",
     "fatores": [
       "chuva"
@@ -51,18 +51,18 @@
     "chuva": {
       "dias": 90,
       "mm": 689.0,
-      "normal_mm": 336.0,
-      "pct_normal": 205.0,
-      "z": 3.02
+      "normal_mm": 340.0,
+      "pct_normal": 202.0,
+      "z": 2.94
     },
     "temperatura": {
       "dias": 30,
-      "media_c": 17.0,
+      "media_c": 17.1,
       "normal_c": 17.0,
-      "z": 0.04
+      "z": 0.1
     },
     "previsao_7d": {
-      "media_c": 15.0,
+      "media_c": 14.8,
       "normal_c": 17.7
     },
     "fonte": "Open-Meteo: previsão (situação atual) e reanálise ERA5 2016–2024 (normais)",
@@ -79,6 +79,6 @@
       "nivel": "NORMAL"
     }
   ],
-  "atualizado_em": "2026-10-16T20:10:38.455192+00:00",
+  "atualizado_em": "2026-10-17T00:52:28.818773+00:00",
   "ultimo_aviso_em": null
 }
