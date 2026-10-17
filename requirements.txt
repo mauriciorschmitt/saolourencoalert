@@ -8,12 +8,12 @@
 requests==2.34.2        # Sentinel Hub, Open-Meteo, Telegram
 Pillow==12.3.0          # painel de imagens (monitor_ndvi.py)
 PyYAML==6.0.3           # config.yaml
-pyproj==3.7.2           # reprojeção para UTM
+pyproj==3.8.0           # reprojeção para UTM
 shapely==2.2.0          # recuo do polígono
 
 # ── indiretas ─────────────────────────────────────────────────────────────
 certifi==2026.7.22
 charset-normalizer==3.5.2
 idna==3.20
-numpy==2.4.6
+numpy==2.5.4
 urllib3==2.8.0
