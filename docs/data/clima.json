@@ -1,5 +1,5 @@
 {
-  "atualizado_em": "2026-10-19T16:32:03.899377+00:00",
+  "atualizado_em": "2026-10-19T19:58:49.416238+00:00",
   "data": "2026-10-19",
   "condicao": "FAVORAVEL",
   "fatores": [
@@ -16,10 +16,10 @@
     "dias": 30,
     "media_c": 17.0,
     "normal_c": 17.0,
-    "z": -0.06
+    "z": -0.07
   },
   "previsao_7d": {
-    "media_c": 16.9,
+    "media_c": 16.5,
     "normal_c": 17.8
   },
   "fonte": "Open-Meteo: previsão (situação atual) e reanálise ERA5 2016–2024 (normais)",
