@@ -52,6 +52,10 @@ ANT = {"nivel": "NORMAL", "ultimo_aviso_em": "2026-10-12T10:00"}
     ({"nivel": "NORMAL"}, SEXTA, ANT, None),
     ({"nivel": "NORMAL"}, SEGUNDA, ANT, "resumo semanal"),
     ({"nivel": "NORMAL"}, SEGUNDA, {"nivel": "NORMAL", "ultimo_aviso_em": "2026-10-19T09:30"}, None),
+    # alerta.json grava a chave com null enquanto nenhum aviso foi enviado
+    # (execuções com NOTIFICAR=0): quebrou o resumo de 19/10/2026
+    ({"nivel": "NORMAL"}, SEGUNDA, {"nivel": "NORMAL", "ultimo_aviso_em": None}, "resumo semanal"),
+    ({"nivel": "NORMAL"}, SEGUNDA, {"nivel": "NORMAL"}, "resumo semanal"),
     ({"nivel": "VIGILANCIA", "mudou_de": "NORMAL"}, SEXTA, ANT, "mudança de nível"),
     ({"nivel": "NORMAL", "mudou_de": "VIGILANCIA"}, SEXTA, ANT, "mudança de nível"),
     ({"nivel": "ALERTA"}, SEXTA, {"nivel": "ALERTA"}, "lembrete: segue em alerta"),
@@ -121,3 +125,20 @@ def test_mensagem_usa_virgula_decimal():
               "fontes": [{"id": "radar", "nome": "Radar", "data": "2026-10-12", "nivel": "NORMAL",
                           "valida": True, "texto": "normal", "area_ha": 8.12}]}
     assert "8,1 ha" in A.compor(estado, CFG)
+
+
+# ── robustez ───────────────────────────────────────────────────────────────
+
+def test_nivel_e_gravado_mesmo_se_o_aviso_falhar(monkeypatch, tmp_path):
+    saida = tmp_path / "alerta.json"
+    monkeypatch.setattr(A, "SAIDA", saida)
+    monkeypatch.setenv("NOTIFICAR", "0")
+    monkeypatch.setattr("sys.argv", ["src.alerta"])
+
+    def quebra(*a, **k):
+        raise RuntimeError("falha simulada na decisão do aviso")
+
+    monkeypatch.setattr(A, "motivo_aviso", quebra)
+    with pytest.raises(RuntimeError):
+        A.main()
+    assert saida.exists() and '"nivel"' in saida.read_text(encoding="utf-8")
