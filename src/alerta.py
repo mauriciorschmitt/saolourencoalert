@@ -360,13 +360,20 @@ def motivo_aviso(estado: dict, anterior: Optional[dict], cfg: dict,
         return "lembrete: segue em alerta"
     dia = av.get("resumo_semanal")
     if dia is not None and hoje.weekday() == int(dia):
-        ultimo = (anterior or {}).get("ultimo_aviso_em", "")[:10]
+        # `or ""`, não default do get: a chave existe com null enquanto
+        # nenhum aviso foi enviado.
+        ultimo = ((anterior or {}).get("ultimo_aviso_em") or "")[:10]
         if ultimo != hoje.isoformat():
             return "resumo semanal"
     return None
 
 
 # ── principal ──────────────────────────────────────────────────────────────
+
+def gravar(estado: dict) -> None:
+    SAIDA.parent.mkdir(parents=True, exist_ok=True)
+    SAIDA.write_text(json.dumps(estado, ensure_ascii=False, indent=2), encoding="utf-8")
+
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
@@ -406,6 +413,11 @@ def main() -> int:
     for m in calc["motivos"]:
         log.info("  %s", m)
 
+    # Grava o nível antes de decidir e enviar o aviso: se algo falhar daqui em
+    # diante, a página continua mostrando a situação atual. Em 19/10/2026 um
+    # erro na decisão do resumo semanal deixou o semáforo sem atualizar.
+    gravar(estado)
+
     motivo = motivo_aviso(estado, anterior, cfg, hoje, args.forcar_aviso)
     mensagem = compor(estado, cfg)
     log.info("Mensagem:\n%s", mensagem)
@@ -421,13 +433,11 @@ def main() -> int:
                 assunto += f" (antes {ROTULO.get(mudou_de, mudou_de)})"
             notificacao.todos(assunto, mensagem, imagem)
             estado["ultimo_aviso_em"] = estado["atualizado_em"]
+            gravar(estado)
         else:
             notificacao.todos("", "")   # registra no log que foi suprimido
     else:
         log.info("Sem aviso nesta execução (nível estável, fora do dia do resumo).")
-
-    SAIDA.parent.mkdir(parents=True, exist_ok=True)
-    SAIDA.write_text(json.dumps(estado, ensure_ascii=False, indent=2), encoding="utf-8")
     return 0
 
 
