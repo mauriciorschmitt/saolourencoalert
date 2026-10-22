@@ -14,7 +14,7 @@
     {
       "id": "agua",
       "nome": "Qualidade da água",
-      "data": "2026-10-07",
+      "data": "2026-10-20",
       "nivel": "NORMAL",
       "valida": true,
       "texto": "normal",
@@ -23,14 +23,14 @@
     {
       "id": "macrofitas",
       "nome": "Macrófitas (NDVI)",
-      "data": "2026-10-07",
+      "data": "2026-10-20",
       "nivel": "NORMAL",
-      "texto": "NDVI levemente acima do padrão",
+      "texto": "normal",
       "confianca": "ALTA",
       "valida": true,
-      "z": 1.6673,
-      "ndvi": 0.04103347382145959,
-      "nuvens_pct": 14.9
+      "z": 1.4692,
+      "ndvi": -0.0014605116237008926,
+      "nuvens_pct": 20.6
     }
   ],
   "crescimento": {
@@ -42,28 +42,28 @@
   },
   "motivos": [],
   "clima": {
-    "atualizado_em": "2026-10-19T19:58:49.416238+00:00",
-    "data": "2026-10-19",
+    "atualizado_em": "2026-10-22T14:34:11.648491+00:00",
+    "data": "2026-10-22",
     "condicao": "FAVORAVEL",
     "fatores": [
       "chuva"
     ],
     "chuva": {
       "dias": 90,
-      "mm": 687.0,
-      "normal_mm": 348.0,
-      "pct_normal": 197.0,
-      "z": 2.8
+      "mm": 652.0,
+      "normal_mm": 360.0,
+      "pct_normal": 181.0,
+      "z": 2.33
     },
     "temperatura": {
       "dias": 30,
-      "media_c": 17.0,
-      "normal_c": 17.0,
-      "z": -0.07
+      "media_c": 16.7,
+      "normal_c": 17.1,
+      "z": -0.42
     },
     "previsao_7d": {
-      "media_c": 16.5,
-      "normal_c": 17.8
+      "media_c": 17.0,
+      "normal_c": 17.7
     },
     "fonte": "Open-Meteo: previsão (situação atual) e reanálise ERA5 2016–2024 (normais)",
     "nota": "Contexto, não alerta. Chuva forte leva nutrientes à represa e calor acelera o crescimento das macrófitas; a relação com infestações foi observada em um único evento (2025)."
@@ -79,6 +79,6 @@
       "nivel": "NORMAL"
     }
   ],
-  "atualizado_em": "2026-10-19T19:58:55.719725+00:00",
+  "atualizado_em": "2026-10-22T14:34:23.221587+00:00",
   "ultimo_aviso_em": "2026-10-19T19:58:55.719725+00:00"
 }
