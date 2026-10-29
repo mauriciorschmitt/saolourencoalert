@@ -12,7 +12,7 @@
     "frac_vegetacao_status": "NORMAL",
     "frac_vegetacao_confirmado": "NAO"
   },
-  "atualizado_em": "2026-10-26T16:12:02.704198+00:00",
+  "atualizado_em": "2026-10-29T16:15:14.609235+00:00",
   "limiar_vh_db": -20.0,
   "z_atencao": 2.0,
   "z_alerta": 3.0,
