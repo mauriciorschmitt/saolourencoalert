@@ -4,12 +4,12 @@
     {
       "id": "radar",
       "nome": "Radar",
-      "data": "2026-10-29",
+      "data": "2026-11-05",
       "nivel": "NORMAL",
       "valida": true,
       "texto": "normal",
-      "area_ha": 10.15,
-      "z": -0.533
+      "area_ha": 10.13,
+      "z": -0.44
     },
     {
       "id": "agua",
@@ -34,36 +34,36 @@
     }
   ],
   "crescimento": {
-    "ha_semana": 0.74,
-    "desde": "2026-10-12",
-    "ate": "2026-10-29",
+    "ha_semana": 0.12,
+    "desde": "2026-10-17",
+    "ate": "2026-11-05",
     "passagens": 4,
     "acelerado": false
   },
   "motivos": [],
   "clima": {
-    "atualizado_em": "2026-11-05T17:29:06.103830+00:00",
-    "data": "2026-11-05",
+    "atualizado_em": "2026-11-09T19:55:05.390751+00:00",
+    "data": "2026-11-09",
     "condicao": "FAVORAVEL",
     "fatores": [
       "chuva"
     ],
     "chuva": {
       "dias": 90,
-      "mm": 760.0,
-      "normal_mm": 397.0,
-      "pct_normal": 191.0,
-      "z": 2.7
+      "mm": 749.0,
+      "normal_mm": 398.0,
+      "pct_normal": 188.0,
+      "z": 2.71
     },
     "temperatura": {
       "dias": 30,
-      "media_c": 17.2,
-      "normal_c": 17.5,
-      "z": -0.32
+      "media_c": 17.0,
+      "normal_c": 17.6,
+      "z": -0.62
     },
     "previsao_7d": {
-      "media_c": 16.3,
-      "normal_c": 18.1
+      "media_c": 18.8,
+      "normal_c": 18.6
     },
     "fonte": "Open-Meteo: previsão (situação atual) e reanálise ERA5 2016–2024 (normais)",
     "nota": "Contexto, não alerta. Chuva forte leva nutrientes à represa e calor acelera o crescimento das macrófitas; a relação com infestações foi observada em um único evento (2025)."
@@ -79,6 +79,6 @@
       "nivel": "NORMAL"
     }
   ],
-  "atualizado_em": "2026-11-05T17:29:12.869941+00:00",
-  "ultimo_aviso_em": "2026-11-02T19:35:48.397899+00:00"
+  "atualizado_em": "2026-11-09T19:55:10.529057+00:00",
+  "ultimo_aviso_em": "2026-11-09T19:55:10.529057+00:00"
 }
