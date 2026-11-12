@@ -1,16 +1,16 @@
 {
   "schema_version": "3.0",
-  "run_id": "a6623eaa-ca0c-424e-9551-0f5047dc1ac2",
-  "updated_at": "2026-11-09T19:55:10.319059+00:00",
-  "date": "2026-10-10",
-  "ndvi": 0.1420787932732391,
-  "ndwi": -0.12861557102053764,
-  "ndmi": 0.269963071584471,
-  "cloud_pct": 92.9,
-  "valid_fraction": 0.0706,
-  "zscore": 2.1385,
-  "status": "ALERTA",
-  "confianca": "BAIXA",
+  "run_id": "7b78d4f8-4432-49bd-a9f7-ce185ea553f3",
+  "updated_at": "2026-11-12T17:39:18.755368+00:00",
+  "date": "2026-11-09",
+  "ndvi": -0.2605552050059517,
+  "ndwi": 0.1835656583484516,
+  "ndmi": 0.35769434662118255,
+  "cloud_pct": 56.8,
+  "valid_fraction": 0.4324,
+  "zscore": -0.881,
+  "status": "NORMAL",
+  "confianca": "MEDIA",
   "confianca_limiares": {
     "alta": 0.7,
     "media": 0.3
@@ -19,7 +19,7 @@
   "alerta_confirmado": "NAO",
   "persistencia_exigida": true,
   "persistencia_nota": "Alerta só é confirmado quando duas observações qualificadas consecutivas ultrapassam o limiar. Pico isolado de NDVI é sinal típico de nuvem residual, não de expansão de vegetação.",
-  "notificado": false,
+  "notificado": true,
   "cloud_threshold": 10,
   "cloud_note": "Cobertura estimada pela máscara SCL na área de estudo; 10% é apenas referência e não bloqueia o envio."
 }

@@ -4,12 +4,12 @@
     {
       "id": "radar",
       "nome": "Radar",
-      "data": "2026-11-05",
+      "data": "2026-11-10",
       "nivel": "NORMAL",
       "valida": true,
       "texto": "normal",
-      "area_ha": 10.13,
-      "z": -0.44
+      "area_ha": 8.93,
+      "z": -1.044
     },
     {
       "id": "agua",
@@ -23,47 +23,47 @@
     {
       "id": "macrofitas",
       "nome": "Macrófitas (NDVI)",
-      "data": "2026-10-20",
+      "data": "2026-11-09",
       "nivel": "NORMAL",
       "texto": "normal",
-      "confianca": "ALTA",
+      "confianca": "MEDIA",
       "valida": true,
-      "z": 1.4692,
-      "ndvi": -0.0014605116237008926,
-      "nuvens_pct": 20.6
+      "z": -0.881,
+      "ndvi": -0.2605552050059517,
+      "nuvens_pct": 56.8
     }
   ],
   "crescimento": {
-    "ha_semana": 0.12,
-    "desde": "2026-10-17",
-    "ate": "2026-11-05",
+    "ha_semana": -0.39,
+    "desde": "2026-10-24",
+    "ate": "2026-11-10",
     "passagens": 4,
     "acelerado": false
   },
   "motivos": [],
   "clima": {
-    "atualizado_em": "2026-11-09T19:55:05.390751+00:00",
-    "data": "2026-11-09",
+    "atualizado_em": "2026-11-12T17:39:12.832008+00:00",
+    "data": "2026-11-12",
     "condicao": "FAVORAVEL",
     "fatores": [
       "chuva"
     ],
     "chuva": {
       "dias": 90,
-      "mm": 749.0,
-      "normal_mm": 398.0,
-      "pct_normal": 188.0,
-      "z": 2.71
+      "mm": 714.0,
+      "normal_mm": 393.0,
+      "pct_normal": 182.0,
+      "z": 2.49
     },
     "temperatura": {
       "dias": 30,
-      "media_c": 17.0,
-      "normal_c": 17.6,
-      "z": -0.62
+      "media_c": 17.1,
+      "normal_c": 17.7,
+      "z": -0.68
     },
     "previsao_7d": {
-      "media_c": 18.8,
-      "normal_c": 18.6
+      "media_c": 20.5,
+      "normal_c": 18.8
     },
     "fonte": "Open-Meteo: previsão (situação atual) e reanálise ERA5 2016–2024 (normais)",
     "nota": "Contexto, não alerta. Chuva forte leva nutrientes à represa e calor acelera o crescimento das macrófitas; a relação com infestações foi observada em um único evento (2025)."
@@ -79,6 +79,6 @@
       "nivel": "NORMAL"
     }
   ],
-  "atualizado_em": "2026-11-09T19:55:10.529057+00:00",
+  "atualizado_em": "2026-11-12T17:39:18.912088+00:00",
   "ultimo_aviso_em": "2026-11-09T19:55:10.529057+00:00"
 }
