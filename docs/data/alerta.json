@@ -4,19 +4,19 @@
     {
       "id": "radar",
       "nome": "Radar",
-      "data": "2026-11-17",
+      "data": "2026-11-22",
       "nivel": "NORMAL",
       "valida": true,
       "texto": "normal",
-      "area_ha": 7.74,
-      "z": -1.653
+      "area_ha": 9.8,
+      "z": -0.604
     },
     {
       "id": "agua",
       "nome": "Qualidade da água",
       "data": "2026-10-20",
       "nivel": "NORMAL",
-      "valida": true,
+      "valida": false,
       "texto": "normal",
       "indices": "fai"
     },
@@ -34,36 +34,36 @@
     }
   ],
   "crescimento": {
-    "ha_semana": -0.94,
-    "desde": "2026-10-29",
-    "ate": "2026-11-17",
+    "ha_semana": -0.29,
+    "desde": "2026-11-05",
+    "ate": "2026-11-22",
     "passagens": 4,
     "acelerado": false
   },
   "motivos": [],
   "clima": {
-    "atualizado_em": "2026-11-19T18:23:22.535695+00:00",
-    "data": "2026-11-19",
+    "atualizado_em": "2026-11-23T21:32:53.869580+00:00",
+    "data": "2026-11-23",
     "condicao": "FAVORAVEL",
     "fatores": [
       "chuva"
     ],
     "chuva": {
       "dias": 90,
-      "mm": 709.0,
-      "normal_mm": 384.0,
-      "pct_normal": 185.0,
-      "z": 2.37
+      "mm": 748.0,
+      "normal_mm": 387.0,
+      "pct_normal": 193.0,
+      "z": 2.51
     },
     "temperatura": {
       "dias": 30,
-      "media_c": 18.2,
-      "normal_c": 18.0,
-      "z": 0.22
+      "media_c": 18.8,
+      "normal_c": 18.2,
+      "z": 0.66
     },
     "previsao_7d": {
-      "media_c": 20.7,
-      "normal_c": 19.1
+      "media_c": 18.0,
+      "normal_c": 19.3
     },
     "fonte": "Open-Meteo: previsão (situação atual) e reanálise ERA5 2016–2024 (normais)",
     "nota": "Contexto, não alerta. Chuva forte leva nutrientes à represa e calor acelera o crescimento das macrófitas; a relação com infestações foi observada em um único evento (2025)."
@@ -79,6 +79,6 @@
       "nivel": "NORMAL"
     }
   ],
-  "atualizado_em": "2026-11-19T18:23:30.669265+00:00",
-  "ultimo_aviso_em": "2026-11-16T19:41:57.526036+00:00"
+  "atualizado_em": "2026-11-23T21:33:00.235960+00:00",
+  "ultimo_aviso_em": "2026-11-23T21:33:00.235960+00:00"
 }
