@@ -148,7 +148,9 @@ footer li{margin-bottom:6px;max-width:74ch}
 
 <script>
 const DADOS='data/';
-const SISTEMA_ANTIGO='https://mauriciorschmitt.github.io/saolourencoalert/';
+// Painel de macrófitas: mesma origem, caminho relativo. Assim o link
+// continua certo se o domínio mudar de novo.
+const SISTEMA_ANTIGO='macrofitas.html';
 
 const num=v=>{const n=parseFloat(v);return Number.isFinite(n)?n:null;};
 const fmt=(v,d=3)=>v===null?'—':v.toLocaleString('pt-BR',
