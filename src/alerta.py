@@ -40,7 +40,7 @@ RAIZ = Path(__file__).resolve().parent.parent
 DADOS = RAIZ / "docs" / "data"
 SAIDA = DADOS / "alerta.json"
 PAINEL = RAIZ / "docs" / "images" / "latest" / "panel.png"
-PAINEL_URL = "mauriciorschmitt.github.io/saolourencoalert"
+PAINEL_URL = "represa.monitoramafra.com.br"
 
 NIVEIS = ("NORMAL", "VIGILANCIA", "ALERTA")
 RANK = {n: i for i, n in enumerate(NIVEIS)}
