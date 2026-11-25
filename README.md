@@ -1,14 +1,14 @@
 # Monitoramento Ambiental da Represa São Lourenço
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22838354.svg)](https://doi.org/10.5281/zenodo.22838354)
-[![Painel](https://img.shields.io/badge/painel-online-2e7d32)](https://mauriciorschmitt.github.io/saolourencoalert/)
+[![Painel](https://img.shields.io/badge/painel-online-2e7d32)](https://represa.monitoramafra.com.br/)
 
 Plataforma de monitoramento ambiental por sensoriamento remoto da Represa
 São Lourenço, em Mafra (SC). Processa imagens Sentinel-2 duas vezes por
 semana, sem intervenção manual, e roda inteiramente em infraestrutura
 gratuita.
 
-**Painel:** https://mauriciorschmitt.github.io/saolourencoalert/
+**Painel:** https://represa.monitoramafra.com.br/
 
 A plataforma reúne dois módulos independentes sobre o mesmo reservatório:
 
@@ -199,7 +199,7 @@ Parâmetros e calibração em `config.yaml`, seção `radar`.
 | CDOM (proxy) | B03, B04 | Matéria orgânica dissolvida — exploratório | — |
 
 Explicação detalhada de cada um, com fórmula e interpretação, na página
-[Indicadores e série completa](https://mauriciorschmitt.github.io/saolourencoalert/indicadores.html).
+[Indicadores e série completa](https://represa.monitoramafra.com.br/indicadores.html).
 
 Todas as comparações são contra a média e o desvio **daquele mês** no
 período 2016–2024, calculados apenas sobre cenas de alta confiança. Comparar
@@ -253,7 +253,7 @@ se fragmenta em cinco partes.
 O sistema compara a si mesmo há dez anos, o que é circular. Observações in
 loco quebram esse círculo e são a lacuna mais importante do projeto.
 
-O registro é feito pelo [formulário de campo](https://mauriciorschmitt.github.io/saolourencoalert/campo.html),
+O registro é feito pelo [formulário de campo](https://represa.monitoramafra.com.br/campo.html),
 que captura a localização do aparelho e abre uma issue já preenchida; as
 fotos são anexadas ali. Um fluxo converte a issue numa linha de
 `data/campo.csv`. O protocolo completo está em
@@ -293,7 +293,7 @@ em medida.
 │   ├── registrar_campo.py      conversão de issue em registro
 │   └── monitor.py              orquestração da qualidade da água
 ├── docs/                       publicado via GitHub Pages
-│   ├── index.html              painel com as duas abas
+│   ├── index.html              painel com as três abas
 │   ├── macrofitas.html         painel original do módulo de macrófitas
 │   ├── indicadores.html        explicação dos índices e série completa
 │   ├── campo.html              formulário de campo (uso interno)
